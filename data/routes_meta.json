@@ -1,0 +1,702 @@
+{
+  "1": {
+    "RouteNo": "01",
+    "RouteName": "Bến Thành - Bến xe buýt Chợ Lớn"
+  },
+  "10": {
+    "RouteNo": "10",
+    "RouteName": "Đại học Quốc Gia - Bến xe Miền Tây"
+  },
+  "100": {
+    "RouteNo": "62-9",
+    "RouteName": "Bến xe buýt Quận 8 - Thị xã Gò Công"
+  },
+  "101": {
+    "RouteNo": "64",
+    "RouteName": "Bến xe Miền Đông - Đầm Sen"
+  },
+  "102": {
+    "RouteNo": "65",
+    "RouteName": "Bến Thành - Cách Mạng Tháng Tám - Bến xe An Sương"
+  },
+  "104": {
+    "RouteNo": "68",
+    "RouteName": "Bến xe buýt Chợ Lớn - Đại học Tài Chính - Marketing"
+  },
+  "105": {
+    "RouteNo": "69",
+    "RouteName": "Bến xe buýt Sài Gòn - Khu dân cư Vĩnh Lộc"
+  },
+  "106": {
+    "RouteNo": "70",
+    "RouteName": "Tân Quy - Bến Súc"
+  },
+  "107": {
+    "RouteNo": "70-1",
+    "RouteName": " Bến xe Củ Chi - Bến xe Tây Ninh"
+  },
+  "108": {
+    "RouteNo": "70-2",
+    "RouteName": "Bến xe Củ Chi - Tòa Thánh - Khu du lịch Núi Bà Đen"
+  },
+  "11": {
+    "RouteNo": "100",
+    "RouteName": "Bến xe Củ Chi - Cầu Tân Thái"
+  },
+  "111": {
+    "RouteNo": "71",
+    "RouteName": "Bến xe An Sương - Phật Cô Đơn"
+  },
+  "112": {
+    "RouteNo": "72",
+    "RouteName": "Bến xe buýt Sài Gòn - Hiệp Phước"
+  },
+  "113": {
+    "RouteNo": "73",
+    "RouteName": "Chợ Bình Chánh - Khu công nghiệp Lê Minh Xuân"
+  },
+  "114": {
+    "RouteNo": "74",
+    "RouteName": "Bến xe An Sương - Bến xe Củ Chi"
+  },
+  "115": {
+    "RouteNo": "75",
+    "RouteName": "Sài Gòn - Cần Giờ"
+  },
+  "116": {
+    "RouteNo": "76",
+    "RouteName": "Long Phước - Bến xe Miền Đông mới"
+  },
+  "117": {
+    "RouteNo": "77",
+    "RouteName": "Đồng Hòa - Cần Thạnh"
+  },
+  "118": {
+    "RouteNo": "78",
+    "RouteName": "Bến xe buýt Thới An - Ngã ba Giồng - Cầu Lớn"
+  },
+  "119": {
+    "RouteNo": "79",
+    "RouteName": "Bến xe Củ Chi - Đền Bến Dược"
+  },
+  "12": {
+    "RouteNo": "101",
+    "RouteName": "Bến xe buýt Chợ Lớn - Chợ Tân Nhựt"
+  },
+  "121": {
+    "RouteNo": "81",
+    "RouteName": "Bến xe buýt Chợ Lớn - Lê Minh Xuân"
+  },
+  "124": {
+    "RouteNo": "84",
+    "RouteName": "Bến xe buýt Chợ Lớn - Tân Túc"
+  },
+  "125": {
+    "RouteNo": "85",
+    "RouteName": "Bến xe An Sương - Khu công nghiệp Nhị Xuân"
+  },
+  "126": {
+    "RouteNo": "86",
+    "RouteName": "Bến Thành - Đại học Tôn Đức Thắng - Nhơn Đức"
+  },
+  "127": {
+    "RouteNo": "87",
+    "RouteName": "Bến xe Củ Chi - An Nhơn Tây"
+  },
+  "128": {
+    "RouteNo": "88",
+    "RouteName": "Bến Thành - Chợ Long Phước"
+  },
+  "129": {
+    "RouteNo": "89",
+    "RouteName": "Đại học Nông Lâm - Bến tàu Hiệp Bình Chánh"
+  },
+  "13": {
+    "RouteNo": "102",
+    "RouteName": "Bến xe buýt Sài Gòn - Nguyễn Văn Linh - Bến xe Miền Tây"
+  },
+  "130": {
+    "RouteNo": "90",
+    "RouteName": "Phà Bình Khánh - Cần Thạnh"
+  },
+  "131": {
+    "RouteNo": "91",
+    "RouteName": "Bến xe Miền Tây - Chợ nông sản Thủ Đức"
+  },
+  "133": {
+    "RouteNo": "93",
+    "RouteName": "Bến Thành - Bến xe Miền Đông mới"
+  },
+  "134": {
+    "RouteNo": "94",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Củ Chi"
+  },
+  "137": {
+    "RouteNo": "99",
+    "RouteName": "Chợ Thạnh Mỹ Lợi - Đại học Quốc gia"
+  },
+  "14": {
+    "RouteNo": "103",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Ngã tư Ga"
+  },
+  "15": {
+    "RouteNo": "104",
+    "RouteName": "Bến xe An Sương - Bến xe buýt Văn Thánh"
+  },
+  "16": {
+    "RouteNo": "107",
+    "RouteName": "Bến xe Củ Chi - Bố Heo"
+  },
+  "178": {
+    "RouteNo": "127",
+    "RouteName": "An Thới Đông - Ngã ba Bà Xán"
+  },
+  "179": {
+    "RouteNo": "128",
+    "RouteName": "Tân Điền - An Nghĩa"
+  },
+  "18": {
+    "RouteNo": "110",
+    "RouteName": "Hiệp Phước - Phước Lộc"
+  },
+  "199": {
+    "RouteNo": "109",
+    "RouteName": "Bến xe buýt Sài Gòn - Sân bay Tân Sơn Nhất"
+  },
+  "20": {
+    "RouteNo": "122",
+    "RouteName": "Bến xe An Sương - Tân Quy"
+  },
+  "204": {
+    "RouteNo": "62-1",
+    "RouteName": "Bến xe buýt Chợ Lớn  - Bến xe Tân Trụ"
+  },
+  "214": {
+    "RouteNo": "62-6",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Hậu Nghĩa"
+  },
+  "215": {
+    "RouteNo": "60-2",
+    "RouteName": "Đại học Nông Lâm - Bến xe Phú Túc"
+  },
+  "23": {
+    "RouteNo": "126",
+    "RouteName": "Bến xe Củ Chi - Bình Mỹ"
+  },
+  "24": {
+    "RouteNo": "13",
+    "RouteName": "Bến xe buýt Sài Gòn - Bến xe Củ Chi"
+  },
+  "25": {
+    "RouteNo": "139",
+    "RouteName": "Bến xe Miền Tây - Khu Tái Định Cư Phú Mỹ"
+  },
+  "26": {
+    "RouteNo": "14",
+    "RouteName": "Bến xe Miền Đông - Bến xe Miền Tây"
+  },
+  "27": {
+    "RouteNo": "140",
+    "RouteName": "Bến xe buýt Sài Gòn - Phạm Thế Hiển - Khu dân cư Phú Lợi"
+  },
+  "28": {
+    "RouteNo": "141",
+    "RouteName": "Khu du lịch BCR - Long Trường - Khu chế xuất Linh Trung II"
+  },
+  "3": {
+    "RouteNo": "03",
+    "RouteName": "Bến Thành - Thạnh Xuân"
+  },
+  "30": {
+    "RouteNo": "145",
+    "RouteName": "Bến xe buýt Chợ Lớn - Chợ Hiệp Thành"
+  },
+  "302": {
+    "RouteNo": "HS-04",
+    "RouteName": "Rừng Sác (Bình Khánh) - Trường THCS Bình Khánh"
+  },
+  "303": {
+    "RouteNo": "HS-01",
+    "RouteName": "Hà Quang Vóc - Trường THCS Bình Khánh"
+  },
+  "304": {
+    "RouteNo": "HS-02",
+    "RouteName": "Bà Xán - Trường THCS Bình Khánh"
+  },
+  "31": {
+    "RouteNo": "146",
+    "RouteName": "Bến xe Miền Đông - Chợ Hiệp Thành"
+  },
+  "32": {
+    "RouteNo": "148",
+    "RouteName": "Bến xe Miền Tây - Gò Vấp"
+  },
+  "335": {
+    "RouteNo": "72-1",
+    "RouteName": "Sân bay Tân Sơn Nhất – Đường cao tốc – Bến xe Vũng Tàu"
+  },
+  "336": {
+    "RouteNo": "DL01",
+    "RouteName": "Tuyến xe  du lịch vòng khu vực trung tâm thành phố"
+  },
+  "337": {
+    "RouteNo": "SWB1",
+    "RouteName": "Bạch Đằng - Linh Đông"
+  },
+  "34": {
+    "RouteNo": "15",
+    "RouteName": "Chợ Phú Định - Đầm Sen"
+  },
+  "340": {
+    "RouteNo": "D4",
+    "RouteName": "Vinhomes Grand Park - Bến xe buýt Sài Gòn"
+  },
+  "344": {
+    "RouteNo": "159",
+    "RouteName": "Chung cư Ngô Tất Tố - Ngã tư Hàng Xanh"
+  },
+  "345": {
+    "RouteNo": "155",
+    "RouteName": "Ga Bến Thành - Nhà hát Thành phố"
+  },
+  "346": {
+    "RouteNo": "61-9",
+    "RouteName": "Thủ Dầu Một - Suối Tiên - Bến xe Miền Đông Mới"
+  },
+  "347": {
+    "RouteNo": "156D",
+    "RouteName": "Ga Bến Thành - Ga Hòa Hưng - Bệnh viện Mắt TP.HCM"
+  },
+  "348": {
+    "RouteNo": "61-77",
+    "RouteName": "Thành phố mới - Thành phố Dĩ An - Bến xe Miền Đông mới"
+  },
+  "349": {
+    "RouteNo": "156V",
+    "RouteName": "Ga Bến Thành - Đại học Sài Gòn Cơ sở 3 - Ga Hòa Hưng"
+  },
+  "35": {
+    "RouteNo": "150",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Miền Đông mới"
+  },
+  "350": {
+    "RouteNo": "167D",
+    "RouteName": "Đại học Nông Lâm - Khu Chế xuất Linh Trung 1 - Ga Metro Khu Công nghệ cao"
+  },
+  "353": {
+    "RouteNo": "167V",
+    "RouteName": "Đại học Nông Lâm - Ga Metro Khu Công nghệ cao - Khu Chế xuất Linh Trung 1"
+  },
+  "355": {
+    "RouteNo": "168D",
+    "RouteName": "Đại học Ngân Hàng - Ga Thủ Đức - Nhà Thiếu nhi Thành phố Thủ Đức"
+  },
+  "356": {
+    "RouteNo": "154",
+    "RouteName": "Trường Đại học Quản lý và Công nghệ -  Masteri An Phú"
+  },
+  "359": {
+    "RouteNo": "165",
+    "RouteName": "Đại học Nông Lâm - Khu Công nghệ cao"
+  },
+  "36": {
+    "RouteNo": "151",
+    "RouteName": "Bến xe Miền Tây - Bến xe An Sương"
+  },
+  "362": {
+    "RouteNo": "162",
+    "RouteName": "Chung cư Man Thiện - Trường Trung học cơ sở Hoa Lư"
+  },
+  "364": {
+    "RouteNo": "161",
+    "RouteName": "Bến xe buýt Văn Thánh – Bến xe Ngã tư Ga"
+  },
+  "365": {
+    "RouteNo": "160",
+    "RouteName": "Ga Văn Thánh - Vinhomes Central Park "
+  },
+  "367": {
+    "RouteNo": "168V",
+    "RouteName": "Đại học Ngân hàng - Nhà Thiếu nhi Thành phố Thủ Đức - Ga Thủ Đức"
+  },
+  "368": {
+    "RouteNo": "169D",
+    "RouteName": "Ga Metro Bình Thái - Vincom Thủ Đức - Cảng Phúc Long"
+  },
+  "369": {
+    "RouteNo": "169V",
+    "RouteName": "Ga Metro Bình Thái - Cảng Phúc Long - Vincom Thủ Đức"
+  },
+  "37": {
+    "RouteNo": "152",
+    "RouteName": "Khu dân cư Trung Sơn - Bến Thành - Sân bay Tân Sơn Nhất"
+  },
+  "371": {
+    "RouteNo": "DL02",
+    "RouteName": "City Tour Sài Gòn - Gia Định"
+  },
+  "372": {
+    "RouteNo": "158",
+    "RouteName": "Bến xe buýt Văn Thánh - Cư xá Thanh Đa"
+  },
+  "373": {
+    "RouteNo": "157",
+    "RouteName": "Bến xe buýt Văn Thánh -  Khu dân cư Thạnh Mỹ Lợi"
+  },
+  "375": {
+    "RouteNo": "153",
+    "RouteName": "Bến tàu thủy Bình An – Đường Liên Phường"
+  },
+  "376": {
+    "RouteNo": "166",
+    "RouteName": "Đại học Quốc Gia - Suối Tiên"
+  },
+  "38": {
+    "RouteNo": "16",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe buýt Tân Phú"
+  },
+  "380": {
+    "RouteNo": "63-1",
+    "RouteName": "Bến xe buýt Tân Phú - Bến xe Tiền Giang"
+  },
+  "381": {
+    "RouteNo": "60-5",
+    "RouteName": "Bến xe buýt Đại học Quốc Gia – Bến xe Biên Hòa"
+  },
+  "382": {
+    "RouteNo": "60-7",
+    "RouteName": "Bến xe Miền Đông mới - Bến xe Biên Hòa"
+  },
+  "383": {
+    "RouteNo": "67",
+    "RouteName": "Bến xe Miền Đông (cũ) - Bến xe Miền Đông (mới)"
+  },
+  "384": {
+    "RouteNo": "MRT1",
+    "RouteName": "Bến Thành - Suối Tiên"
+  },
+  "385": {
+    "RouteNo": "DL03",
+    "RouteName": "Vận chuyển hành khách bằng xe 2 tầng, thoáng nóc Sài Gòn – Chợ Lớn"
+  },
+  "386": {
+    "RouteNo": "DL04",
+    "RouteName": "City tour Sài Gòn - Chợ Lớn"
+  },
+  "387": {
+    "RouteNo": "HS-03",
+    "RouteName": "Đường Trần Quang Quờn (Khu dân cư kho lúa) - Trường THCS Bình Khánh"
+  },
+  "388": {
+    "RouteNo": "HS-05",
+    "RouteName": "Hà Quang Vóc - Trường THPT Bình Khánh"
+  },
+  "389": {
+    "RouteNo": "HS-06",
+    "RouteName": "Bà Xán - Trường THPT Bình Khánh"
+  },
+  "390": {
+    "RouteNo": "HS-07",
+    "RouteName": "Đường Rừng Sác (Bình Khánh) - Trường THPT Bình Khánh"
+  },
+  "393": {
+    "RouteNo": "163D",
+    "RouteName": "Ga Bình Thái - Trường Trung học cơ sở Phước Bình - Cao đẳng Công Thương"
+  },
+  "394": {
+    "RouteNo": "163V",
+    "RouteName": "Ga Bình Thái - Cao đẳng Công Thương - Trường Trung học cơ sở Phước Bình"
+  },
+  "395": {
+    "RouteNo": "164D",
+    "RouteName": "Đại học Nông Lâm - Ga Metro Khu Công nghệ cao - Chung cư Topaz"
+  },
+  "396": {
+    "RouteNo": "164V",
+    "RouteName": "Đại học Nông Lâm - Chung cư Topaz - Ga Metro Khu Công nghệ cao"
+  },
+  "4": {
+    "RouteNo": "04",
+    "RouteName": "Bến Thành - Cộng Hòa - Bến xe An Sương"
+  },
+  "40": {
+    "RouteNo": "18",
+    "RouteName": "Bến Thành - Chợ Hiệp Thành"
+  },
+  "403": {
+    "RouteNo": "72-2B",
+    "RouteName": "Thành phố Vũng Tàu - Sân bay Tân Sơn Nhất"
+  },
+  "404": {
+    "RouteNo": "172",
+    "RouteName": "Bến xe Vũng Tàu - Trung tâm hành chính Bà Rịa Vũng Tàu -  Bến Thành"
+  },
+  "405": {
+    "RouteNo": "171",
+    "RouteName": "Bến xe Phú Chánh - Trung tâm hành chính Bình Dương - Bến Thành"
+  },
+  "406": {
+    "RouteNo": "DL05",
+    "RouteName": "Bến xe buýt Sài Gòn - Tân Định"
+  },
+  "407": {
+    "RouteNo": "61-2",
+    "RouteName": "Thủ Dầu Một - Mỹ Phước"
+  },
+  "409": {
+    "RouteNo": "61-37",
+    "RouteName": "Becamex Tower - Huỳnh Văn Lũy - Văn phòng công ty xe buýt Becamex Tokyu"
+  },
+  "41": {
+    "RouteNo": "19",
+    "RouteName": "Bến Thành - Khu chế xuất Linh Trung - Đại học Quốc gia"
+  },
+  "410": {
+    "RouteNo": "61-38",
+    "RouteName": "Becamex Tower - Huỳnh Văn Lũy - Trường Ngô Thời Nhiệm"
+  },
+  "411": {
+    "RouteNo": "61-39",
+    "RouteName": "Becamex Tower - Khu công nghiệp VSIP 2 - Nhà ở An sinh xã hội Hòa Lợi"
+  },
+  "412": {
+    "RouteNo": "61-51",
+    "RouteName": "Becamex Tower - Thành phố mới Bình Dương - Nhà ở an sinh xã hội Định Hoà"
+  },
+  "413": {
+    "RouteNo": "61-52",
+    "RouteName": "Becamex Tower - Hikari - Văn phòng công ty xe buýt Becamex Tokyu"
+  },
+  "414": {
+    "RouteNo": "61-53",
+    "RouteName": "Becamex Tower - Trường Ngô Thời Nhiệm"
+  },
+  "415": {
+    "RouteNo": "61-55",
+    "RouteName": "Becamex Tower - Đại học Quốc Tế Miền Đông"
+  },
+  "416": {
+    "RouteNo": "61-67",
+    "RouteName": "Hikari - Sora Gardens - Nhà ở an sinh xã hội Định Hòa"
+  },
+  "417": {
+    "RouteNo": "61-68",
+    "RouteName": "Hikari - Chợ Phú Chánh - Nhà ở an sinh xã hội Hòa Lợi"
+  },
+  "418": {
+    "RouteNo": "61-70",
+    "RouteName": "Thành phố mới - Thành phố Bến Cát"
+  },
+  "419": {
+    "RouteNo": "61-4",
+    "RouteName": "Thủ Dầu Một - Thanh Tuyền - Dầu Tiếng"
+  },
+  "42": {
+    "RouteNo": "20",
+    "RouteName": "Bến Thành - Nhà Bè"
+  },
+  "420": {
+    "RouteNo": "61-73",
+    "RouteName": "Thành phố mới - Thành phố Tân Uyên"
+  },
+  "421": {
+    "RouteNo": "173",
+    "RouteName": "Trung tâm Côn Đảo - Cỏ Ống"
+  },
+  "422": {
+    "RouteNo": "60-15",
+    "RouteName": "Thủ Dầu Một - Đồng Xoài"
+  },
+  "423": {
+    "RouteNo": "60-18",
+    "RouteName": "Khu du lịch Đại Nam - Khu du lịch sinh thái Vườn Xoài"
+  },
+  "43": {
+    "RouteNo": "22",
+    "RouteName": "Bến xe buýt Quận 8 - Bến xe buýt Lê Minh Xuân"
+  },
+  "44": {
+    "RouteNo": "23",
+    "RouteName": "Bến xe buýt Chợ Lớn - Ngã ba Giồng - Cầu Lớn"
+  },
+  "45": {
+    "RouteNo": "24",
+    "RouteName": "Bến xe Miền Đông - Hóc Môn"
+  },
+  "46": {
+    "RouteNo": "25",
+    "RouteName": "Bến Xe buýt Quận 8 - Khu dân cư Vĩnh Lộc A"
+  },
+  "48": {
+    "RouteNo": "27",
+    "RouteName": "Bến xe buýt Sài Gòn - Âu Cơ - Bến xe An Sương"
+  },
+  "49": {
+    "RouteNo": "28",
+    "RouteName": "Bến xe buýt Sài Gòn - Chợ Xuân Thới Thượng"
+  },
+  "5": {
+    "RouteNo": "05",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Biên Hòa"
+  },
+  "50": {
+    "RouteNo": "29",
+    "RouteName": "Phà Cát Lái - Chợ nông sản Thủ Đức"
+  },
+  "51": {
+    "RouteNo": "30",
+    "RouteName": "Chợ Tân Hương - Bến xe buýt Văn Thánh"
+  },
+  "52": {
+    "RouteNo": "31",
+    "RouteName": "Đại Học Tôn Đức Thắng - Bến Thành - Đại học Văn Lang"
+  },
+  "53": {
+    "RouteNo": "32",
+    "RouteName": "Bến xe Miền Tây - Bến xe Ngã tư Ga"
+  },
+  "54": {
+    "RouteNo": "33",
+    "RouteName": "Bến xe An Sương - Suối Tiên - Đại học Quốc gia"
+  },
+  "55": {
+    "RouteNo": "34",
+    "RouteName": "Bến xe buýt Sài Gòn - Bến xe buýt Quận 8"
+  },
+  "57": {
+    "RouteNo": "36",
+    "RouteName": "Bến Thành - Thới An"
+  },
+  "59": {
+    "RouteNo": "38",
+    "RouteName": "Khu dân cư Tân Quy - Bến Thành - Đầm Sen"
+  },
+  "6": {
+    "RouteNo": "06",
+    "RouteName": "Bến xe buýt Chợ Lớn - Đại học Nông Lâm"
+  },
+  "60": {
+    "RouteNo": "39",
+    "RouteName": "Bến Thành - Võ Văn Kiệt - Bến xe Miền Tây"
+  },
+  "62": {
+    "RouteNo": "41",
+    "RouteName": "Bến xe Miền Tây - Ngã tư Bốn Xã - Bến xe An Sương"
+  },
+  "64": {
+    "RouteNo": "43",
+    "RouteName": "Bến xe Miền Đông - Phà Cát Lái"
+  },
+  "65": {
+    "RouteNo": "44",
+    "RouteName": "Cảng Quận 4 - Bình Quới"
+  },
+  "66": {
+    "RouteNo": "45",
+    "RouteName": "Đại học Kinh tế - Bến Thành - Bến xe Miền Đông"
+  },
+  "67": {
+    "RouteNo": "46",
+    "RouteName": "Công viên Tôn Thất Thuyết - Bến Mễ Cốc"
+  },
+  "68": {
+    "RouteNo": "47",
+    "RouteName": "Bến xe buýt Chợ Lớn - Quốc lộ 50 - Hưng Long"
+  },
+  "69": {
+    "RouteNo": "48",
+    "RouteName": "Bến xe buýt Tân Phú - Chợ Hiệp Thành"
+  },
+  "7": {
+    "RouteNo": "07",
+    "RouteName": "Bến xe buýt Chợ Lớn - Gò Vấp"
+  },
+  "70": {
+    "RouteNo": "50",
+    "RouteName": "Đại học Bách khoa - Đại học Quốc gia"
+  },
+  "72": {
+    "RouteNo": "52",
+    "RouteName": "Bến Thành - Đại học Quốc gia"
+  },
+  "73": {
+    "RouteNo": "53",
+    "RouteName": "Lê Hồng Phong - Đại học Quốc gia"
+  },
+  "75": {
+    "RouteNo": "55",
+    "RouteName": "Công viên phần mềm Quang Trung - Bến xe buýt Văn Thánh"
+  },
+  "76": {
+    "RouteNo": "56",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Miền Đông mới"
+  },
+  "77": {
+    "RouteNo": "57",
+    "RouteName": "Chợ Phước Bình - Trường Trung học Phổ thông Hiệp Bình"
+  },
+  "78": {
+    "RouteNo": "58",
+    "RouteName": "Bến xe Ngã tư Ga - Khu công nghiệp Đông Nam"
+  },
+  "79": {
+    "RouteNo": "59",
+    "RouteName": "Bến xe buýt Quận 8 - Bến xe Ngã tư Ga"
+  },
+  "8": {
+    "RouteNo": "08",
+    "RouteName": "Bến xe buýt Quận 8 - Đại học Quốc gia"
+  },
+  "81": {
+    "RouteNo": "60-1",
+    "RouteName": "Bến xe Miền Tây - Bến xe Biên Hòa"
+  },
+  "82": {
+    "RouteNo": "60-3",
+    "RouteName": "Bến xe Miền Đông (cũ) - Khu Công nghiệp Nhơn Trạch"
+  },
+  "84": {
+    "RouteNo": "61",
+    "RouteName": "Bến xe buýt Chợ Lớn - Khu công nghiệp Lê Minh Xuân"
+  },
+  "86": {
+    "RouteNo": "61-3",
+    "RouteName": "Bến xe An Sương - Thủ Dầu Một"
+  },
+  "9": {
+    "RouteNo": "09",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bình Chánh - Hưng Long"
+  },
+  "90": {
+    "RouteNo": "61-8",
+    "RouteName": "Thủ Dầu Một - Bến xe Miền Đông"
+  },
+  "91": {
+    "RouteNo": "62",
+    "RouteName": "Bến xe buýt Quận 8 - Thới An"
+  },
+  "92": {
+    "RouteNo": "62-10",
+    "RouteName": "Bến xe buýt Chợ Lớn - Thanh Vĩnh Đông"
+  },
+  "93": {
+    "RouteNo": "62-11",
+    "RouteName": "Bến xe buýt Quận 8 - Tân Tập"
+  },
+  "94": {
+    "RouteNo": "62-2",
+    "RouteName": "Bến xe buýt Chợ Lớn - Ngã ba Tân Lân"
+  },
+  "97": {
+    "RouteNo": "62-5",
+    "RouteName": "Bến xe An Sương - Bến xe Hậu Nghĩa"
+  },
+  "98": {
+    "RouteNo": "62-7",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Đức Huệ"
+  },
+  "99": {
+    "RouteNo": "62-8",
+    "RouteName": "Bến xe buýt Chợ Lớn - Bến xe Tân An"
+  }
+}

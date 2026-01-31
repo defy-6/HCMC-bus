@@ -1,0 +1,1 @@
+Couldn't find the requested file /dist/duckdb-browser-umd.js in @duckdb/duckdb-wasm.

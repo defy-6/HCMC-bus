@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Bus Vehicles – Weekly Playback</title>
+
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"/>
+
+  <script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
+  <script src="https://unpkg.com/@deck.gl/mapbox@8.9.36/dist.min.js"></script>
+
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { position: absolute; inset: 0; }
+
+    .panel {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(255,255,255,0.96);
+      padding: 12px;
+      border-radius: 10px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      z-index: 10;
+      box-shadow: 0 6px 20px rgba(0,0,0,.2);
+      min-width: 460px;
+      max-width: 560px;
+      user-select: none;
+    }
+
+    .row { margin-top: 8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    input[type=range] { width: 230px; }
+    .small { font-size: 12px; color:#555; }
+    .muted { color:#777; }
+    .title { font-weight: 650; }
+
+    button { cursor:pointer; }
+    code { font-size: 12px; }
+
+    .timeInput {
+      width: 70px;
+      padding: 2px 6px;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      font-family: inherit;
+    }
+
+    /* -------- Route list (aligned) -------- */
+    .routes {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      max-height: 260px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .routeBlock {
+      padding: 6px 6px 8px 6px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .routeHead {
+      display: grid;
+      grid-template-columns: 92px 1fr; /* 左：按钮列固定宽，右：信息列 */
+      gap: 10px;
+      align-items: start;
+    }
+
+    .routeHead .btnCol {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+    }
+
+    .routeHead button {
+      width: 92px;
+      height: 26px;
+      padding: 0;
+    }
+
+    .routeHead .infoCol .titleRow {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .routeHead .infoCol .descRow { margin-top: 2px; }
+    .routeHead .infoCol .varsRow { margin-top: 2px; }
+
+    .routeVarRow {
+      display: grid;
+      grid-template-columns: 92px 1fr; /* 与 header 对齐 */
+      gap: 10px;
+      align-items: center;
+      padding: 3px 0;
+    }
+
+    .routeVarRow .cbCol {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      padding-left: 8px; /* 子项视觉缩进 */
+    }
+
+    .routeVarRow input[type="checkbox"] { transform: scale(1.05); }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background:#f2f2f2;
+      font-size:12px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+<div id="map"></div>
+
+<div class="panel">
+  <div class="row">
+    <b>Day</b>
+    <select id="day">
+      <option>Mon</option><option>Tue</option><option>Wed</option>
+      <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
+    </select>
+
+    <button id="play">▶ Play</button>
+    <button id="pause" disabled>⏸ Pause</button>
+
+    <label class="small">Speed</label>
+    <select id="speed">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <b>Minute</b>
+    <input id="minute" type="range" min="0" max="1439" value="360"/>
+    <span id="label">06:00</span>
+
+    <span class="small muted">| jump to</span>
+    <input id="startTime" class="timeInput" placeholder="HH:MM" value="06:00"/>
+    <button id="goTime">Go</button>
+  </div>
+
+  <div class="row">
+    <label><input type="checkbox" id="showIcon" checked /> Show bus icons</label>
+  </div>
+
+  <div class="row">
+    <b>Icon size</b>
+    <input id="iconSize" type="range" min="8" max="48" value="18"/>
+    <span id="iconSizeLabel">18</span>
+  </div>
+
+  <div class="row">
+    <b>Point size</b>
+    <input id="pointSize" type="range" min="2" max="20" value="6"/>
+    <span id="pointSizeLabel">6</span>
+    <span class="small">(Scatter mode, scales with zoom)</span>
+  </div>
+
+  <div class="row">
+    <label><input type="checkbox" id="showLines" checked /> Show route lines</label>
+  </div>
+
+  <div class="row">
+    <b>Line width</b>
+    <input id="lineWidth" type="range" min="1" max="14" value="3"/>
+    <span id="lineWidthLabel">3</span>
+    <span class="small">(px)</span>
+  </div>
+
+  <div class="row">
+    <b>Line opacity</b>
+    <input id="lineOpacity" type="range" min="0" max="100" value="55"/>
+    <span id="lineOpacityLabel">55%</span>
+  </div>
+
+  <div class="row small"><b>Route filter</b> (RouteNo → RouteVar)</div>
+  <div class="row">
+    <button id="selectAll">All</button>
+    <button id="selectNone">Clear</button>
+    <span class="small" id="routeCount">Routes: 0</span>
+    <span class="small" id="filterModeLabel"></span>
+  </div>
+
+  <div class="routes" id="routesBox">
+    <div class="small">Loading routes…</div>
+  </div>
+
+  <div class="row small" id="stat">loading…</div>
+</div>
+
+<script>
+const {IconLayer, ScatterplotLayer, PathLayer} = deck;
+const {MapboxOverlay} = deck;
+
+// ---------------- Map ----------------
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  center: [106.7, 10.77],
+  zoom: 11
+});
+const overlay = new MapboxOverlay({layers: []});
+map.addControl(overlay);
+
+// ---------------- UI ----------------
+const daySel = document.getElementById("day");
+const minuteSel = document.getElementById("minute");
+const label = document.getElementById("label");
+const stat = document.getElementById("stat");
+const btnPlay = document.getElementById("play");
+const btnPause = document.getElementById("pause");
+const speedSel = document.getElementById("speed");
+
+const showIconChk = document.getElementById("showIcon");
+const iconSizeSel = document.getElementById("iconSize");
+const iconSizeLabel = document.getElementById("iconSizeLabel");
+
+const pointSizeSel = document.getElementById("pointSize");
+const pointSizeLabel = document.getElementById("pointSizeLabel");
+
+const showLinesChk = document.getElementById("showLines");
+const lineWidthSel = document.getElementById("lineWidth");
+const lineWidthLabel = document.getElementById("lineWidthLabel");
+
+const lineOpacitySel = document.getElementById("lineOpacity");
+const lineOpacityLabel = document.getElementById("lineOpacityLabel");
+
+const routesBox = document.getElementById("routesBox");
+const routeCount = document.getElementById("routeCount");
+const filterModeLabel = document.getElementById("filterModeLabel");
+const btnAll = document.getElementById("selectAll");
+const btnNone = document.getElementById("selectNone");
+
+const startTimeInp = document.getElementById("startTime");
+const goTimeBtn = document.getElementById("goTime");
+
+// ---------------- Helpers ----------------
+function hhmm(m){
+  return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+}
+function parseHHMM(s){
+  const m = /^(\d{1,2}):(\d{2})$/.exec((s||"").trim());
+  if (!m) return null;
+  const hh = +m[1], mm = +m[2];
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh<0 || hh>23 || mm<0 || mm>59) return null;
+  return hh*60 + mm;
+}
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+// ✅ 颜色按 RouteId，确保同一路线线/点同色
+function colorByRouteId(routeId){
+  const key = String(routeId);
+  let h = 0;
+  for (let i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i)) | 0;
+  return [40 + (h & 160), 40 + ((h>>8) & 160), 40 + ((h>>16) & 160), 180];
+}
+
+// scatter 点大小随 zoom 变化
+function zoomToPointRadiusMeters(baseMeters){
+  const z = map.getZoom();
+  const factor = Math.pow(2, (z - 12) * 0.35);
+  return Math.max(1, baseMeters * factor);
+}
+
+// RouteVar key
+function rvKey(routeId, routeVarId){
+  const rid = String(routeId);
+  const rvid = (routeVarId===undefined || routeVarId===null || routeVarId==="") ? "NA" : String(routeVarId);
+  return `${rid}:${rvid}`;
+}
+
+// ---------------- Files ----------------
+const DATA_BASE = "data/vehicle_state_weekly";        // day csv: Mon.csv ... Sun.csv
+const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
+const ROUTE_META_URL = "data/routes_meta.json";
+const BUS_ICON_URL = "assets/bus.png";
+
+const ICON_MAPPING = { bus: {x:0,y:0,width:64,height:64,anchorY:64} };
+
+// ---------------- Caches ----------------
+const csvCache = new Map();        // day -> csvText
+let routeMeta = null;              // {RouteId: {RouteNo, RouteName?}}
+let routeLines = null;             // [{RouteId, RouteVarId, path}]
+let routesByDay = new Map();       // day -> { byRouteId: Map(RouteId -> Set(RouteVarId)), allKeys:Set(routeId:routeVarId) }
+
+async function fetchJson(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  return await res.json();
+}
+async function getRouteMeta(){
+  if (routeMeta) return routeMeta;
+  routeMeta = await fetchJson(ROUTE_META_URL).catch(e => {
+    console.warn("routes_meta.json missing; fallback to RouteId display.", e);
+    return {};
+  });
+  return routeMeta;
+}
+async function getDayCsv(day){
+  if (csvCache.has(day)) return csvCache.get(day);
+  const url = `${DATA_BASE}/${day}.csv`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  const text = await res.text();
+  csvCache.set(day, text);
+  return text;
+}
+async function loadRouteLines(){
+  if (routeLines) return routeLines;
+  const gj = await fetchJson(LINE_GEOJSON_URL).catch(e => {
+    console.warn("route_shape_lines.geojson missing/invalid.", e);
+    return {features: []};
+  });
+
+  const out = [];
+  for (const f of (gj.features || [])){
+    const props = f.properties || {};
+    const geom = f.geometry || {};
+    const rid = props.RouteId ?? props.routeid ?? props.route_id ?? props.ROUTEID;
+    const rvid = props.RouteVarId ?? props.routevarid ?? props.route_var_id ?? props.ROUTEVARID;
+    if (!rid) continue;
+
+    if (geom.type === "LineString"){
+      out.push({RouteId: String(rid), RouteVarId: (rvid??"")!=="" ? String(rvid) : "NA", path: geom.coordinates});
+    } else if (geom.type === "MultiLineString"){
+      for (const coords of geom.coordinates){
+        out.push({RouteId: String(rid), RouteVarId: (rvid??"")!=="" ? String(rvid) : "NA", path: coords});
+      }
+    }
+  }
+  routeLines = out;
+  return routeLines;
+}
+
+// -------- Build route-var index per day from CSV --------
+async function getRouteVarIndexForDay(day){
+  if (routesByDay.has(day)) return routesByDay.get(day);
+
+  const text = await getDayCsv(day);
+  const lines = text.trim().split("\n");
+  if (lines.length <= 1) {
+    const empty = { byRouteId: new Map(), allKeys: new Set() };
+    routesByDay.set(day, empty);
+    return empty;
+  }
+
+  const header = lines[0].split(",");
+  const idxRouteId = header.findIndex(h => h.trim().toLowerCase() === "routeid");
+  const idxRouteVarId = header.findIndex(h => h.trim().toLowerCase() === "routevarid");
+
+  if (idxRouteId < 0) throw new Error("CSV header missing RouteId");
+
+  const byRouteId = new Map(); // RouteId -> Set(RouteVarId)
+  const allKeys = new Set();   // routeId:routeVarId
+
+  for (let i=1;i<lines.length;i++){
+    const c = lines[i].split(",");
+    const rid = c[idxRouteId];
+    if (rid === undefined || rid === "") continue;
+
+    const R = String(rid);
+    const V = (idxRouteVarId>=0) ? (((c[idxRouteVarId]??"")!=="") ? String(c[idxRouteVarId]) : "NA") : "NA";
+
+    if (!byRouteId.has(R)) byRouteId.set(R, new Set());
+    byRouteId.get(R).add(V);
+    allKeys.add(rvKey(R,V));
+  }
+
+  const idx = { byRouteId, allKeys };
+  routesByDay.set(day, idx);
+  return idx;
+}
+
+// ---------------- Filter state machine ----------------
+// 筛选粒度：RouteId:RouteVarId
+let filterMode = "all";          // all | none | custom
+let selectedKeys = new Set();    // routeId:routeVarId
+
+function setFilterMode(mode){
+  filterMode = mode;
+  if (mode !== "custom") selectedKeys = new Set();
+  filterModeLabel.textContent = `mode: ${mode}`;
+}
+function keyAllowed(routeId, routeVarId){
+  if (filterMode === "all") return true;
+  if (filterMode === "none") return false;
+  return selectedKeys.has(rvKey(routeId, routeVarId));
+}
+
+// ---------------- Parsing per minute ----------------
+function parseCsvMinute(csvText, targetMinute){
+  const lines = csvText.trim().split("\n");
+  if (lines.length <= 1) return {points: [], header: []};
+
+  const header = lines[0].split(",");
+  const idxMinute = header.findIndex(h => h.trim().toLowerCase() === "minute");
+  const idxLng = header.findIndex(h => h.trim().toLowerCase() === "lng");
+  const idxLat = header.findIndex(h => h.trim().toLowerCase() === "lat");
+  const idxRouteId = header.findIndex(h => h.trim().toLowerCase() === "routeid");
+  const idxRouteVarId = header.findIndex(h => h.trim().toLowerCase() === "routevarid");
+
+  if (idxMinute<0 || idxLng<0 || idxLat<0 || idxRouteId<0) {
+    throw new Error("CSV header must include minute,lng,lat,RouteId");
+  }
+
+  const pts = [];
+  for (let i=1;i<lines.length;i++){
+    const c = lines[i].split(",");
+    if (+c[idxMinute] !== targetMinute) continue;
+
+    const rid = String(c[idxRouteId]);
+    const rvid = (idxRouteVarId>=0) ? (((c[idxRouteVarId]??"")!=="") ? String(c[idxRouteVarId]) : "NA") : "NA";
+    if (!keyAllowed(rid, rvid)) continue;
+
+    const lng = +c[idxLng], lat = +c[idxLat];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+    pts.push({ lng, lat, RouteId: rid, RouteVarId: rvid });
+  }
+  return {points: pts, header};
+}
+
+// ---------------- Route list UI (aligned, RouteNo -> RouteVarId) ----------------
+async function renderRouteCheckboxes(dayIndex){
+  const meta = await getRouteMeta();
+  const routeIds = Array.from(dayIndex.byRouteId.keys()).sort((a,b)=> (+a)-(+b));
+
+  routeCount.textContent = `Routes: ${routeIds.length}`;
+  routesBox.innerHTML = "";
+
+  for (const rid of routeIds){
+    const m = meta[rid] || {};
+    const routeNo = m.RouteNo || rid;
+    const routeName = m.RouteName || "";
+
+    const vars = Array.from(dayIndex.byRouteId.get(rid) || new Set(["NA"]))
+      .sort((a,b)=> (String(a)).localeCompare(String(b), "en", {numeric:true}));
+
+    // --- block container ---
+    const block = document.createElement("div");
+    block.className = "routeBlock";
+
+    // --- header (grid) ---
+    const head = document.createElement("div");
+    head.className = "routeHead";
+
+    const btnCol = document.createElement("div");
+    btnCol.className = "btnCol";
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.textContent = "Toggle all";
+    toggleBtn.onclick = () => {
+      if (filterMode !== "custom"){
+        setFilterMode("custom");
+        selectedKeys = new Set();
+      }
+      const allVarKeys = vars.map(v => rvKey(rid, v));
+      const allSelected = allVarKeys.every(k => selectedKeys.has(k));
+      if (allSelected){
+        for (const k of allVarKeys) selectedKeys.delete(k);
+      } else {
+        for (const k of allVarKeys) selectedKeys.add(k);
+      }
+
+      if (selectedKeys.size === 0) setFilterMode("none");
+      if (selectedKeys.size === dayIndex.allKeys.size) setFilterMode("all");
+
+      renderRouteCheckboxes(dayIndex);
+      loadAndRender();
+    };
+    btnCol.appendChild(toggleBtn);
+
+    const infoCol = document.createElement("div");
+    infoCol.className = "infoCol";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "titleRow";
+
+    const col = colorByRouteId(rid);
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.style.borderLeft = `10px solid rgba(${col[0]},${col[1]},${col[2]},${(col[3]/255).toFixed(3)})`;
+    chip.textContent = `RouteNo: ${routeNo}`;
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.appendChild(chip);
+
+    titleRow.appendChild(title);
+    infoCol.appendChild(titleRow);
+
+    if (routeName){
+      const desc = document.createElement("div");
+      desc.className = "small descRow";
+      desc.textContent = routeName;
+      infoCol.appendChild(desc);
+    }
+
+    const varsRow = document.createElement("div");
+    varsRow.className = "small muted varsRow";
+    varsRow.textContent = `RouteVarId: ${vars.join(", ")}`;
+    infoCol.appendChild(varsRow);
+
+    head.appendChild(btnCol);
+    head.appendChild(infoCol);
+    block.appendChild(head);
+
+    // --- var rows (aligned grid) ---
+    for (const v of vars){
+      const row = document.createElement("div");
+      row.className = "routeVarRow";
+
+      const cbCol = document.createElement("div");
+      cbCol.className = "cbCol";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = keyAllowed(rid, v);
+      cb.onchange = () => {
+        if (filterMode !== "custom"){
+          setFilterMode("custom");
+          selectedKeys = new Set();
+        }
+        const k = rvKey(rid, v);
+        if (cb.checked) selectedKeys.add(k);
+        else selectedKeys.delete(k);
+
+        if (selectedKeys.size === 0) setFilterMode("none");
+        if (selectedKeys.size === dayIndex.allKeys.size) setFilterMode("all");
+
+        renderRouteCheckboxes(dayIndex);
+        loadAndRender();
+      };
+
+      cbCol.appendChild(cb);
+
+      const lab = document.createElement("div");
+      lab.className = "small";
+      lab.innerHTML = `<b>RouteVarId</b>: <code>${v}</code>`;
+
+      row.appendChild(cbCol);
+      row.appendChild(lab);
+      block.appendChild(row);
+    }
+
+    routesBox.appendChild(block);
+  }
+}
+
+// ---------------- Render layers ----------------
+function renderLayers(points, minute, linesData){
+  const layers = [];
+
+  const lineOpacity = clamp(+lineOpacitySel.value, 0, 100) / 100;
+  const lineAlpha = Math.round(255 * lineOpacity);
+
+  // ✅ 线路在下：先 PathLayer
+  if (showLinesChk.checked && linesData && linesData.length){
+    const filteredLines = linesData.filter(l => keyAllowed(l.RouteId, l.RouteVarId));
+    layers.push(new PathLayer({
+      id: "route-lines",
+      data: filteredLines,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPath: d => d.path,
+      getWidth: +lineWidthSel.value,
+      widthUnits: "pixels",
+      getColor: d => {
+        const c = colorByRouteId(d.RouteId);
+        return [c[0], c[1], c[2], lineAlpha];
+      },
+      pickable: false,
+      parameters: { depthTest: false }
+    }));
+  }
+
+  // ✅ 点/图标在上
+  if (showIconChk.checked){
+    layers.push(new IconLayer({
+      id: "bus-icons",
+      data: points,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition: d => [d.lng, d.lat],
+      iconAtlas: BUS_ICON_URL,
+      iconMapping: ICON_MAPPING,
+      getIcon: () => "bus",
+      sizeUnits: "pixels",
+      getSize: +iconSizeSel.value,
+      getColor: d => colorByRouteId(d.RouteId),
+      pickable: false,
+      parameters: { depthTest: false }
+    }));
+  } else {
+    const base = +pointSizeSel.value;
+    const meters = zoomToPointRadiusMeters(base * 8);
+    layers.push(new ScatterplotLayer({
+      id: "bus-points",
+      data: points,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition: d => [d.lng, d.lat],
+      radiusUnits: "meters",
+      getRadius: meters,
+      getFillColor: d => colorByRouteId(d.RouteId),
+      pickable: false,
+      parameters: { depthTest: false }
+    }));
+  }
+
+  overlay.setProps({layers});
+  stat.textContent =
+    `t=${hhmm(minute)} | vehicles=${points.length} | filter=${filterMode}` +
+    (filterMode==="custom" ? ` (keys=${selectedKeys.size})` : "");
+}
+
+// ---------------- Playback ----------------
+let timer = null;
+function stopPlay(){
+  if (timer) clearInterval(timer);
+  timer = null;
+  btnPlay.disabled = false;
+  btnPause.disabled = true;
+}
+function startPlay(){
+  stopPlay();
+  btnPlay.disabled = true;
+  btnPause.disabled = false;
+  const speed = +speedSel.value;
+  timer = setInterval(() => {
+    minuteSel.value = (+minuteSel.value + 1) % 1440;
+    loadAndRender();
+  }, 1000 / speed);
+}
+
+// ---------------- Main ----------------
+async function loadAndRender(){
+  const day = daySel.value;
+  const minute = +minuteSel.value;
+
+  label.textContent = hhmm(minute);
+  startTimeInp.value = hhmm(minute);
+
+  iconSizeLabel.textContent = iconSizeSel.value;
+  pointSizeLabel.textContent = pointSizeSel.value;
+  lineWidthLabel.textContent = lineWidthSel.value;
+  lineOpacityLabel.textContent = `${lineOpacitySel.value}%`;
+
+  try{
+    const [csvText, idx, lines] = await Promise.all([
+      getDayCsv(day),
+      getRouteVarIndexForDay(day),
+      loadRouteLines()
+    ]);
+
+    // day 切换时重建列表（避免 stale）
+    if (routesBox.dataset.day !== day){
+      routesBox.dataset.day = day;
+      await renderRouteCheckboxes(idx);
+    }
+
+    const {points} = parseCsvMinute(csvText, minute);
+    renderLayers(points, minute, lines);
+
+  }catch(e){
+    console.error(e);
+    stat.textContent = "❌ " + e.message;
+    overlay.setProps({layers: []});
+  }
+}
+
+// ---------------- Events ----------------
+daySel.onchange = async () => { stopPlay(); await loadAndRender(); };
+minuteSel.oninput = () => { stopPlay(); loadAndRender(); };
+speedSel.onchange = () => { if (timer) startPlay(); };
+
+showIconChk.onchange = () => { stopPlay(); loadAndRender(); };
+iconSizeSel.oninput = () => { loadAndRender(); };
+
+pointSizeSel.oninput = () => { loadAndRender(); };
+
+showLinesChk.onchange = () => { loadAndRender(); };
+lineWidthSel.oninput = () => { loadAndRender(); };
+
+lineOpacitySel.oninput = () => { loadAndRender(); };
+
+btnAll.onclick = async () => {
+  setFilterMode("all");
+  const idx = await getRouteVarIndexForDay(daySel.value);
+  await renderRouteCheckboxes(idx);
+  loadAndRender();
+};
+btnNone.onclick = async () => {
+  setFilterMode("none");
+  const idx = await getRouteVarIndexForDay(daySel.value);
+  await renderRouteCheckboxes(idx);
+  loadAndRender();
+};
+
+btnPlay.onclick = startPlay;
+btnPause.onclick = stopPlay;
+
+// zoom -> point scaling only when scatter mode
+map.on("zoom", () => {
+  if (!showIconChk.checked) loadAndRender();
+});
+
+// 手动输入时间跳转
+goTimeBtn.onclick = () => {
+  const v = parseHHMM(startTimeInp.value);
+  if (v === null) {
+    alert("时间格式请输入 HH:MM，例如 06:24");
+    return;
+  }
+  stopPlay();
+  minuteSel.value = clamp(v, 0, 1439);
+  loadAndRender();
+};
+startTimeInp.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") goTimeBtn.click();
+});
+
+// Start
+map.on("load", async () => {
+  setFilterMode("all");
+  await loadAndRender();
+});
+</script>
+
+</body>
+</html>
