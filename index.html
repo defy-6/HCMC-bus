@@ -12,50 +12,45 @@
   <script src="https://unpkg.com/@deck.gl/mapbox@8.9.36/dist.min.js"></script>
 
   <style>
-    /* ---- Reset ---- */
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #map { position: absolute; inset: 0; }
 
-    /* ---- Color tokens (light) ---- */
     :root {
-      --bg:        rgba(255, 255, 255, 0.97);
+      --bg:         rgba(255,255,255,0.97);
       --bg-surface: #f5f5f5;
-      --bg-input:  #fff;
-      --border:    #ddd;
-      --border-focus: #888;
-      --text:      #1a1a1a;
-      --text-muted:#666;
-      --text-hint: #999;
-      --accent:    #2563eb;
-      --accent-bg: #eff6ff;
-      --danger:    #dc2626;
-      --danger-bg: #fef2f2;
-      --radius-sm: 6px;
-      --radius-md: 9px;
-      --radius-lg: 12px;
-      --shadow:    0 4px 24px rgba(0,0,0,.13), 0 1px 4px rgba(0,0,0,.08);
+      --bg-input:   #fff;
+      --border:     #ddd;
+      --text:       #1a1a1a;
+      --text-muted: #666;
+      --text-hint:  #999;
+      --accent:     #2563eb;
+      --accent-bg:  #eff6ff;
+      --danger:     #dc2626;
+      --danger-bg:  #fef2f2;
+      --radius-sm:  6px;
+      --radius-md:  9px;
+      --radius-lg:  12px;
+      --shadow:     0 4px 24px rgba(0,0,0,.13), 0 1px 4px rgba(0,0,0,.08);
     }
 
-    /* ---- Dark mode ---- */
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg:        rgba(28, 28, 30, 0.97);
+        --bg:         rgba(28,28,30,0.97);
         --bg-surface: #2c2c2e;
-        --bg-input:  #3a3a3c;
-        --border:    #48484a;
-        --border-focus: #aaa;
-        --text:      #f0f0f0;
-        --text-muted:#aaa;
-        --text-hint: #777;
-        --accent:    #60a5fa;
-        --accent-bg: #1e3a5f;
-        --danger:    #f87171;
-        --danger-bg: #3b1212;
+        --bg-input:   #3a3a3c;
+        --border:     #48484a;
+        --text:       #f0f0f0;
+        --text-muted: #aaa;
+        --text-hint:  #777;
+        --accent:     #60a5fa;
+        --accent-bg:  #1e3a5f;
+        --danger:     #f87171;
+        --danger-bg:  #3b1212;
       }
     }
 
-    /* ---- Panel shell ---- */
+    /* ---- Panel ---- */
     .panel {
       position: absolute;
       top: 12px; left: 12px;
@@ -71,13 +66,11 @@
       scrollbar-width: thin;
       color: var(--text);
       font-size: 13px;
-      /* Collapse button on mobile */
       transition: width .25s ease, max-height .25s ease;
     }
     .panel.collapsed { width: 44px; max-height: 44px; overflow: hidden; }
     .panel.collapsed .panel-body { display: none; }
 
-    /* Mobile: full-width bottom sheet */
     @media (max-width: 600px) {
       .panel {
         top: auto; left: 0; right: 0; bottom: 0;
@@ -88,7 +81,6 @@
       .panel.collapsed { max-height: 48px; }
     }
 
-    /* ---- Panel header ---- */
     .panel-header {
       display: flex;
       align-items: center;
@@ -101,252 +93,99 @@
       z-index: 1;
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
-    .panel-header-title {
-      font-weight: 600;
-      font-size: 13px;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .btn-collapse {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 16px;
-      line-height: 1;
-      padding: 2px 4px;
-      border-radius: var(--radius-sm);
-      flex-shrink: 0;
-    }
+    .panel-header-title { font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-collapse { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: var(--radius-sm); flex-shrink: 0; }
     .btn-collapse:hover { background: var(--bg-surface); }
 
-    /* ---- Panel body ---- */
     .panel-body { padding: 10px 12px 12px; }
 
-    /* ---- Section groups ---- */
-    .section {
-      margin-bottom: 12px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
+    .section { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
     .section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
-    .section-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--text-hint);
-      margin-bottom: 7px;
-    }
+    .section-label { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-hint); margin-bottom: 7px; }
 
-    /* ---- Row utility ---- */
     .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
     .row:last-child { margin-bottom: 0; }
 
-    /* ---- Labels ---- */
     .lbl { font-size: 12px; color: var(--text-muted); min-width: 72px; }
     .val { font-size: 12px; font-weight: 500; min-width: 28px; text-align: right; color: var(--text); }
     .hint { font-size: 11px; color: var(--text-hint); }
 
-    /* ---- Range slider ---- */
-    input[type=range] {
-      flex: 1;
-      min-width: 80px;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
+    input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); cursor: pointer; }
 
-    /* ---- Select ---- */
     select {
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      font-size: 12px;
-      padding: 3px 6px;
-      cursor: pointer;
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text); font-size: 12px; padding: 3px 6px; cursor: pointer;
     }
     select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-    /* ---- Buttons ---- */
     button {
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--bg-input);
-      color: var(--text);
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      padding: 4px 10px;
-      line-height: 1.4;
-      transition: background .12s;
+      cursor: pointer; border: 1px solid var(--border); background: var(--bg-input);
+      color: var(--text); border-radius: var(--radius-sm); font-size: 12px;
+      padding: 4px 10px; line-height: 1.4; transition: background .12s;
     }
     button:hover { background: var(--bg-surface); }
     button:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* Toggle play button */
-    #playToggle {
-      font-size: 13px;
-      padding: 5px 14px;
-      border-color: var(--accent);
-      color: var(--accent);
-      font-weight: 500;
-    }
+    #playToggle { font-size: 13px; padding: 5px 14px; border-color: var(--accent); color: var(--accent); font-weight: 500; }
     #playToggle.playing { background: var(--accent-bg); }
 
-    /* ---- Time display ---- */
-    .time-display {
-      font-size: 18px;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      color: var(--text);
-      min-width: 52px;
-      text-align: center;
-    }
+    .time-display { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); min-width: 52px; text-align: center; }
 
-    /* ---- Time tick track ---- */
-    .tick-track {
-      position: relative;
-      height: 14px;
-      margin: 2px 0 4px;
-      display: flex;
-      align-items: center;
-    }
-    .tick-track span {
-      position: absolute;
-      font-size: 10px;
-      color: var(--text-hint);
-      transform: translateX(-50%);
-    }
+    .tick-track { position: relative; height: 14px; margin: 2px 0 4px; display: flex; align-items: center; }
+    .tick-track span { position: absolute; font-size: 10px; color: var(--text-hint); transform: translateX(-50%); }
 
-    /* ---- Jump-to input ---- */
     .jump-row { display: flex; align-items: center; gap: 5px; }
     .timeInput {
-      width: 62px;
-      padding: 3px 7px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      font-family: inherit;
-      background: var(--bg-input);
-      color: var(--text);
-      transition: border-color .15s;
+      width: 62px; padding: 3px 7px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
+      background: var(--bg-input); color: var(--text); transition: border-color .15s;
     }
     .timeInput:focus { outline: none; border-color: var(--accent); }
     .timeInput.error { border-color: var(--danger); background: var(--danger-bg); }
 
-    /* Inline error hint */
-    .error-hint {
-      font-size: 11px;
-      color: var(--danger);
-      display: none;
-    }
+    .error-hint { font-size: 11px; color: var(--danger); display: none; }
     .error-hint.visible { display: block; }
 
-    /* ---- Checkbox row ---- */
     .check-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; color: var(--text); }
     .check-row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
 
-    /* ---- Route list ---- */
     .routes {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      max-height: 220px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      background: var(--bg-input);
-      scrollbar-width: thin;
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      max-height: 220px; overflow-y: auto; overflow-x: hidden;
+      background: var(--bg-input); scrollbar-width: thin;
     }
-
-    /* Search input above list */
     .route-search {
-      width: 100%;
-      padding: 5px 9px;
-      border: none;
+      width: 100%; padding: 5px 9px; border: none;
       border-bottom: 1px solid var(--border);
       border-radius: var(--radius-md) var(--radius-md) 0 0;
-      font-size: 12px;
-      font-family: inherit;
-      background: var(--bg-surface);
-      color: var(--text);
+      font-size: 12px; font-family: inherit;
+      background: var(--bg-surface); color: var(--text);
     }
     .route-search:focus { outline: none; background: var(--bg-input); }
     .route-search::placeholder { color: var(--text-hint); }
 
-    .routeBlock {
-      padding: 6px 8px 8px;
-      border-bottom: 1px solid var(--border);
-    }
+    .routeBlock { padding: 6px 8px 8px; border-bottom: 1px solid var(--border); }
     .routeBlock:last-child { border-bottom: none; }
 
-    .routeHead {
-      display: grid;
-      grid-template-columns: 80px 1fr;
-      gap: 8px;
-      align-items: start;
-    }
-
-    .routeHead .btnCol {
-      display: flex;
-      align-items: center;
-    }
-
-    .routeHead button {
-      width: 80px;
-      height: 24px;
-      padding: 0;
-      font-size: 11px;
-    }
-
-    .routeHead .infoCol .titleRow {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
+    .routeHead { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: start; }
+    .routeHead .btnCol { display: flex; align-items: center; }
+    .routeHead button { width: 80px; height: 24px; padding: 0; font-size: 11px; }
+    .routeHead .infoCol .titleRow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
     .routeHead .infoCol .descRow { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
     .routeHead .infoCol .varsRow { margin-top: 2px; font-size: 11px; color: var(--text-hint); }
 
-    .routeVarRow {
-      display: grid;
-      grid-template-columns: 80px 1fr;
-      gap: 8px;
-      align-items: center;
-      padding: 2px 0;
-    }
-
-    .routeVarRow .cbCol {
-      display: flex;
-      align-items: center;
-      padding-left: 6px;
-    }
-
+    .routeVarRow { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; padding: 2px 0; }
+    .routeVarRow .cbCol { display: flex; align-items: center; padding-left: 6px; }
     .routeVarRow input[type="checkbox"] { accent-color: var(--accent); }
 
     .chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: var(--bg-surface);
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-      color: var(--text);
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 999px; background: var(--bg-surface);
+      font-size: 11px; font-weight: 500; white-space: nowrap; color: var(--text);
     }
 
-    /* ---- Status bar ---- */
-    .stat-bar {
-      margin-top: 2px;
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .stat-bar { margin-top: 2px; font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; flex-wrap: wrap; }
     .stat-item { display: flex; gap: 3px; align-items: baseline; }
     .stat-val { font-weight: 600; color: var(--text); }
   </style>
@@ -355,23 +194,18 @@
 <body>
 <div id="map"></div>
 
-<!-- =================== PANEL =================== -->
 <div class="panel" id="panel">
-
-  <!-- Header (sticky) -->
   <div class="panel-header">
     <span class="panel-header-title">Bus Weekly Playback</span>
     <button class="btn-collapse" id="collapseBtn" title="Collapse panel">&#x25B4;</button>
   </div>
 
-  <!-- Scrollable body -->
   <div class="panel-body">
 
-    <!-- ── Section 1: Playback controls ── -->
+    <!-- Playback -->
     <div class="section">
       <div class="section-label">Playback</div>
 
-      <!-- Day + Speed -->
       <div class="row">
         <span class="lbl">Day</span>
         <select id="day">
@@ -387,19 +221,16 @@
         </select>
       </div>
 
-      <!-- Play toggle -->
       <div class="row">
         <button id="playToggle">▶&nbsp;&nbsp;Play</button>
       </div>
 
-      <!-- Time slider -->
-      <div class="row" style="align-items:center; gap:8px;">
+      <div class="row" style="align-items:center;gap:8px;">
         <span class="time-display" id="label">06:00</span>
         <input id="minute" type="range" min="0" max="1439" value="360" step="1"/>
       </div>
 
-      <!-- Tick marks -->
-      <div class="tick-track" style="margin-left: 60px;">
+      <div class="tick-track" style="margin-left:60px;">
         <span style="left:0%">00:00</span>
         <span style="left:25%">06:00</span>
         <span style="left:50%">12:00</span>
@@ -407,7 +238,6 @@
         <span style="left:100%">24:00</span>
       </div>
 
-      <!-- Jump to -->
       <div class="jump-row">
         <span class="lbl">Jump to</span>
         <input id="startTime" class="timeInput" placeholder="HH:MM" value="06:00"/>
@@ -416,39 +246,48 @@
       </div>
     </div>
 
-    <!-- ── Section 2: Display settings ── -->
+    <!-- Display -->
     <div class="section">
       <div class="section-label">Display</div>
 
-      <!-- Bus icons -->
       <div class="check-row">
         <input type="checkbox" id="showIcon" checked />
         <label for="showIcon">Show bus icons</label>
       </div>
       <div class="row">
         <span class="lbl" style="padding-left:18px">Icon size</span>
-        <input id="iconSize" type="range" min="8" max="48" value="18" step="1"/>
-        <span class="val" id="iconSizeLabel">18</span>
+        <input id="iconSize" type="range" min="4" max="48" value="8" step="1"/>
+        <span class="val" id="iconSizeLabel">8</span>
+        <span class="hint">pt</span>
       </div>
 
-      <!-- Point size (scatter) -->
-      <div class="row" style="margin-top:2px">
+      <div class="check-row" style="margin-top:4px">
+        <input type="checkbox" id="showTrail" checked />
+        <label for="showTrail">Comet tail</label>
+      </div>
+      <div class="row">
+        <span class="lbl" style="padding-left:18px">Tail length</span>
+        <input id="trailFrames" type="range" min="2" max="12" value="5" step="1"/>
+        <span class="val" id="trailFramesLabel">5</span>
+        <span class="hint">frames</span>
+      </div>
+
+      <div class="row" style="margin-top:4px">
         <span class="lbl" style="padding-left:18px">Point size</span>
         <input id="pointSize" type="range" min="2" max="20" value="6" step="1"/>
         <span class="val" id="pointSizeLabel">6</span>
       </div>
       <div class="row"><span class="hint" style="margin-left:90px">Scatter mode · scales with zoom</span></div>
 
-      <!-- Route lines -->
       <div class="check-row" style="margin-top:6px">
         <input type="checkbox" id="showLines" checked />
         <label for="showLines">Show route lines</label>
       </div>
       <div class="row">
         <span class="lbl" style="padding-left:18px">Width</span>
-        <input id="lineWidth" type="range" min="1" max="14" value="3" step="1"/>
-        <span class="val" id="lineWidthLabel">3</span>
-        <span class="hint">px</span>
+        <input id="lineWidth" type="range" min="1" max="14" value="2" step="1"/>
+        <span class="val" id="lineWidthLabel">2</span>
+        <span class="hint">pt</span>
       </div>
       <div class="row">
         <span class="lbl" style="padding-left:18px">Opacity</span>
@@ -457,33 +296,30 @@
       </div>
     </div>
 
-    <!-- ── Section 3: Route filter ── -->
+    <!-- Route filter -->
     <div class="section">
       <div class="section-label">Route filter &nbsp;<span class="hint" style="text-transform:none;letter-spacing:0">RouteNo → RouteVar</span></div>
-
       <div class="row" style="margin-bottom:6px">
         <button id="selectAll">All</button>
         <button id="selectNone">Clear</button>
         <span class="hint" id="routeCount">Routes: 0</span>
         <span class="hint" id="filterModeLabel"></span>
       </div>
-
-      <!-- Search -->
       <div class="routes" id="routesBox">
         <input class="route-search" id="routeSearch" placeholder="Search route…" type="search" autocomplete="off"/>
         <div class="hint" style="padding:8px 10px">Loading routes…</div>
       </div>
     </div>
 
-    <!-- ── Status bar ── -->
+    <!-- Status -->
     <div class="stat-bar" id="stat">
       <span class="stat-item">Time <span class="stat-val" id="statTime">—</span></span>
       <span class="stat-item">Vehicles <span class="stat-val" id="statVehicles">—</span></span>
       <span class="stat-item">Filter <span class="stat-val" id="statFilter">—</span></span>
     </div>
 
-  </div><!-- /panel-body -->
-</div><!-- /panel -->
+  </div>
+</div>
 
 <script>
 const {IconLayer, ScatterplotLayer, PathLayer} = deck;
@@ -499,43 +335,51 @@ const map = new maplibregl.Map({
 const overlay = new MapboxOverlay({layers: []});
 map.addControl(overlay);
 
+// ---------------- Trail state ----------------
+// vehicleId -> circular queue of [lng, lat] (oldest first)
+const vehicleTrail = new Map();
+
 // ---------------- UI refs ----------------
-const daySel          = document.getElementById("day");
-const minuteSel       = document.getElementById("minute");
-const labelEl         = document.getElementById("label");
-const statTime        = document.getElementById("statTime");
-const statVehicles    = document.getElementById("statVehicles");
-const statFilter      = document.getElementById("statFilter");
-const btnPlayToggle   = document.getElementById("playToggle");
-const speedSel        = document.getElementById("speed");
+const daySel           = document.getElementById("day");
+const minuteSel        = document.getElementById("minute");
+const labelEl          = document.getElementById("label");
+const statTime         = document.getElementById("statTime");
+const statVehicles     = document.getElementById("statVehicles");
+const statFilter       = document.getElementById("statFilter");
+const btnPlayToggle    = document.getElementById("playToggle");
+const speedSel         = document.getElementById("speed");
 
-const showIconChk     = document.getElementById("showIcon");
-const iconSizeSel     = document.getElementById("iconSize");
-const iconSizeLabel   = document.getElementById("iconSizeLabel");
+const showIconChk      = document.getElementById("showIcon");
+const iconSizeSel      = document.getElementById("iconSize");
+const iconSizeLabel    = document.getElementById("iconSizeLabel");
 
-const pointSizeSel    = document.getElementById("pointSize");
-const pointSizeLabel  = document.getElementById("pointSizeLabel");
+const showTrailChk     = document.getElementById("showTrail");
+const trailFramesSel   = document.getElementById("trailFrames");
+const trailFramesLabel = document.getElementById("trailFramesLabel");
 
-const showLinesChk    = document.getElementById("showLines");
-const lineWidthSel    = document.getElementById("lineWidth");
-const lineWidthLabel  = document.getElementById("lineWidthLabel");
+const pointSizeSel     = document.getElementById("pointSize");
+const pointSizeLabel   = document.getElementById("pointSizeLabel");
 
-const lineOpacitySel  = document.getElementById("lineOpacity");
-const lineOpacityLabel= document.getElementById("lineOpacityLabel");
+const showLinesChk     = document.getElementById("showLines");
+const lineWidthSel     = document.getElementById("lineWidth");
+const lineWidthLabel   = document.getElementById("lineWidthLabel");
 
-const routesBox       = document.getElementById("routesBox");
-const routeCount      = document.getElementById("routeCount");
-const filterModeLabel = document.getElementById("filterModeLabel");
-const btnAll          = document.getElementById("selectAll");
-const btnNone         = document.getElementById("selectNone");
-const startTimeInp    = document.getElementById("startTime");
-const goTimeBtn       = document.getElementById("goTime");
-const timeError       = document.getElementById("timeError");
-const routeSearch     = document.getElementById("routeSearch");
-const collapseBtn     = document.getElementById("collapseBtn");
-const panel           = document.getElementById("panel");
+const lineOpacitySel   = document.getElementById("lineOpacity");
+const lineOpacityLabel = document.getElementById("lineOpacityLabel");
 
-// ---------------- Collapse toggle ----------------
+const routesBox        = document.getElementById("routesBox");
+const routeCount       = document.getElementById("routeCount");
+const filterModeLabel  = document.getElementById("filterModeLabel");
+const btnAll           = document.getElementById("selectAll");
+const btnNone          = document.getElementById("selectNone");
+const startTimeInp     = document.getElementById("startTime");
+const goTimeBtn        = document.getElementById("goTime");
+const timeError        = document.getElementById("timeError");
+const routeSearch      = document.getElementById("routeSearch");
+const collapseBtn      = document.getElementById("collapseBtn");
+const panel            = document.getElementById("panel");
+
+// ---------------- Collapse ----------------
 collapseBtn.addEventListener("click", () => {
   const collapsed = panel.classList.toggle("collapsed");
   collapseBtn.innerHTML = collapsed ? "&#x25BC;" : "&#x25B4;";
@@ -544,44 +388,53 @@ collapseBtn.addEventListener("click", () => {
 
 // ---------------- Helpers ----------------
 function hhmm(m){
-  return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+  return String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
 }
 function parseHHMM(s){
   const m = /^(\d{1,2}):(\d{2})$/.exec((s||"").trim());
   if (!m) return null;
   const hh = +m[1], mm = +m[2];
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (!Number.isFinite(hh)||!Number.isFinite(mm)) return null;
   if (hh<0||hh>23||mm<0||mm>59) return null;
   return hh*60 + mm;
 }
-function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
 
-// Perceptually distributed hue-based color using HSL
+// Perceptually distributed HSL color per route
 function colorByRouteId(routeId){
   const key = String(routeId);
   let h = 0;
   for (let i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i)) | 0;
-  const hue = ((h >>> 0) % 360);
-  const sat = 65 + (((h>>>8) & 0xff) % 25);  // 65–90%
-  const lit = 38 + (((h>>>16) & 0xff) % 18); // 38–56%
-  // HSL to RGB
+  const hue = (h >>> 0) % 360;
+  const sat = 65 + (((h>>>8)  & 0xff) % 25);
+  const lit = 38 + (((h>>>16) & 0xff) % 18);
   const s = sat/100, l = lit/100;
   const a2 = s * Math.min(l, 1-l);
-  const f = n => {
-    const k = (n+hue/30)%12;
-    return l - a2*Math.max(-1, Math.min(k-3, 9-k, 1));
-  };
-  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255), 200];
+  const f = n => { const k=(n+hue/30)%12; return l - a2*Math.max(-1,Math.min(k-3,9-k,1)); };
+  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255), 220];
 }
 
-// Scatter point size scaled by zoom
+// Zoom-scaled sizes
+function zoomToIconSize(basePx){
+  const z = map.getZoom();
+  return Math.max(4, basePx * Math.pow(2, (z-12)*0.7));
+}
+function zoomToLineWidth(basePx){
+  const z = map.getZoom();
+  return Math.max(0.5, basePx * Math.pow(2, (z-12)*0.7));
+}
 function zoomToPointRadiusMeters(baseMeters){
   const z = map.getZoom();
-  const factor = Math.pow(2, (z-12)*0.35);
-  return Math.max(1, baseMeters*factor);
+  return Math.max(1, baseMeters * Math.pow(2, (z-12)*0.35));
 }
 
-// RouteVar key
+// Stable per-vehicle key
+// If your CSV has a VehicleId column, replace with: return d.VehicleId;
+function vehicleId(d){
+  return `${d.RouteId}:${d.RouteVarId}:${d.lng.toFixed(3)}:${d.lat.toFixed(3)}`;
+}
+
+// ---------------- Route key ----------------
 function rvKey(routeId, routeVarId){
   const rid  = String(routeId);
   const rvid = (routeVarId===undefined||routeVarId===null||routeVarId==="") ? "NA" : String(routeVarId);
@@ -589,26 +442,26 @@ function rvKey(routeId, routeVarId){
 }
 
 // ---------------- Files ----------------
-const DATA_BASE       = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
-const LINE_GEOJSON_URL= "data/route_shape_lines.geojson";
-const ROUTE_META_URL  = "data/routes_meta.json";
-const BUS_ICON_URL    = "assets/bus.png";
-const ICON_MAPPING    = { bus:{x:0,y:0,width:64,height:64,anchorY:64} };
+const DATA_BASE        = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
+const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
+const ROUTE_META_URL   = "data/routes_meta.json";
+const BUS_ICON_URL     = "assets/bus.png";
+const ICON_MAPPING     = { bus:{x:0,y:0,width:64,height:64,anchorY:64} };
 
 // ---------------- Caches ----------------
-const csvCache   = new Map();
-let routeMeta    = null;
-let routeLines   = null;
-let routesByDay  = new Map();
+const csvCache  = new Map();
+let routeMeta   = null;
+let routeLines  = null;
+let routesByDay = new Map();
 
 async function fetchJson(url){
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-  return await res.json();
+  return res.json();
 }
 async function getRouteMeta(){
   if (routeMeta) return routeMeta;
-  routeMeta = await fetchJson(ROUTE_META_URL).catch(e=>{
+  routeMeta = await fetchJson(ROUTE_META_URL).catch(e => {
     console.warn("routes_meta.json missing; fallback to RouteId.", e);
     return {};
   });
@@ -625,7 +478,7 @@ async function getDayCsv(day){
 }
 async function loadRouteLines(){
   if (routeLines) return routeLines;
-  const gj = await fetchJson(LINE_GEOJSON_URL).catch(e=>{
+  const gj = await fetchJson(LINE_GEOJSON_URL).catch(e => {
     console.warn("route_shape_lines.geojson missing.", e);
     return {features:[]};
   });
@@ -647,33 +500,32 @@ async function loadRouteLines(){
   return routeLines;
 }
 
-// Build route-var index per day from CSV
 async function getRouteVarIndexForDay(day){
   if (routesByDay.has(day)) return routesByDay.get(day);
   const text  = await getDayCsv(day);
   const lines = text.trim().split("\n");
   if (lines.length<=1){
-    const empty={byRouteId:new Map(),allKeys:new Set()};
-    routesByDay.set(day,empty);
+    const empty = {byRouteId:new Map(), allKeys:new Set()};
+    routesByDay.set(day, empty);
     return empty;
   }
-  const header       = lines[0].split(",");
-  const idxRouteId   = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const idxRouteVarId= header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+  const header        = lines[0].split(",");
+  const idxRouteId    = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const idxRouteVarId = header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
   if (idxRouteId<0) throw new Error("CSV header missing RouteId");
-  const byRouteId=new Map(), allKeys=new Set();
+  const byRouteId = new Map(), allKeys = new Set();
   for (let i=1;i<lines.length;i++){
-    const c=lines[i].split(",");
-    const rid=c[idxRouteId];
-    if (rid===undefined||rid==="") continue;
-    const R=String(rid);
-    const V=(idxRouteVarId>=0)?(((c[idxRouteVarId]??"")!=="")?String(c[idxRouteVarId]):"NA"):"NA";
-    if (!byRouteId.has(R)) byRouteId.set(R,new Set());
+    const c = lines[i].split(",");
+    const rid = c[idxRouteId];
+    if (!rid) continue;
+    const R = String(rid);
+    const V = (idxRouteVarId>=0)?(((c[idxRouteVarId]??"")!=="")?String(c[idxRouteVarId]):"NA"):"NA";
+    if (!byRouteId.has(R)) byRouteId.set(R, new Set());
     byRouteId.get(R).add(V);
     allKeys.add(rvKey(R,V));
   }
-  const idx={byRouteId,allKeys};
-  routesByDay.set(day,idx);
+  const idx = {byRouteId, allKeys};
+  routesByDay.set(day, idx);
   return idx;
 }
 
@@ -682,51 +534,50 @@ let filterMode   = "all";
 let selectedKeys = new Set();
 
 function setFilterMode(mode){
-  filterMode=mode;
-  if (mode!=="custom") selectedKeys=new Set();
+  filterMode = mode;
+  if (mode!=="custom") selectedKeys = new Set();
   filterModeLabel.textContent = mode==="custom" ? `custom (${selectedKeys.size})` : mode;
 }
-function keyAllowed(routeId,routeVarId){
+function keyAllowed(routeId, routeVarId){
   if (filterMode==="all")  return true;
   if (filterMode==="none") return false;
-  return selectedKeys.has(rvKey(routeId,routeVarId));
+  return selectedKeys.has(rvKey(routeId, routeVarId));
 }
 
-// ---------------- Parse CSV at minute ----------------
-function parseCsvMinute(csvText,targetMinute){
-  const lines=csvText.trim().split("\n");
-  if (lines.length<=1) return {points:[],header:[]};
-  const header       = lines[0].split(",");
-  const idxMinute    = header.findIndex(h=>h.trim().toLowerCase()==="minute");
-  const idxLng       = header.findIndex(h=>h.trim().toLowerCase()==="lng");
-  const idxLat       = header.findIndex(h=>h.trim().toLowerCase()==="lat");
-  const idxRouteId   = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const idxRouteVarId= header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+// ---------------- CSV parse ----------------
+function parseCsvMinute(csvText, targetMinute){
+  const lines = csvText.trim().split("\n");
+  if (lines.length<=1) return {points:[], header:[]};
+  const header        = lines[0].split(",");
+  const idxMinute     = header.findIndex(h=>h.trim().toLowerCase()==="minute");
+  const idxLng        = header.findIndex(h=>h.trim().toLowerCase()==="lng");
+  const idxLat        = header.findIndex(h=>h.trim().toLowerCase()==="lat");
+  const idxRouteId    = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const idxRouteVarId = header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
   if (idxMinute<0||idxLng<0||idxLat<0||idxRouteId<0)
     throw new Error("CSV header must include minute,lng,lat,RouteId");
-  const pts=[];
+  const pts = [];
   for (let i=1;i<lines.length;i++){
-    const c=lines[i].split(",");
+    const c = lines[i].split(",");
     if (+c[idxMinute]!==targetMinute) continue;
     const rid  = String(c[idxRouteId]);
     const rvid = (idxRouteVarId>=0)?(((c[idxRouteVarId]??"")!=="")?String(c[idxRouteVarId]):"NA"):"NA";
     if (!keyAllowed(rid,rvid)) continue;
-    const lng=+c[idxLng], lat=+c[idxLat];
+    const lng = +c[idxLng], lat = +c[idxLat];
     if (!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-    pts.push({lng,lat,RouteId:rid,RouteVarId:rvid});
+    pts.push({lng, lat, RouteId:rid, RouteVarId:rvid});
   }
-  return {points:pts,header};
+  return {points:pts, header};
 }
 
 // ---------------- Route list UI ----------------
 let currentRouteSearch = "";
+let lastDayIndex = null;
+
 routeSearch.addEventListener("input", () => {
   currentRouteSearch = routeSearch.value.trim().toLowerCase();
   renderRouteBlocks();
 });
-
-// Keep the last rendered dayIndex for re-filtering
-let lastDayIndex = null;
 
 async function renderRouteCheckboxes(dayIndex){
   lastDayIndex = dayIndex;
@@ -739,16 +590,12 @@ function renderRouteBlocks(){
   if (!dayIndex) return;
   const meta = routeMeta || {};
 
-  // Remove all route blocks but keep the search input
-  const blocks = routesBox.querySelectorAll(".routeBlock");
-  blocks.forEach(b=>b.remove());
+  routesBox.querySelectorAll(".routeBlock").forEach(b=>b.remove());
 
   let routeIds = Array.from(dayIndex.byRouteId.keys()).sort((a,b)=>(+a)-(+b));
-
-  // Apply search filter
   if (currentRouteSearch){
-    routeIds = routeIds.filter(rid=>{
-      const m = meta[rid]||{};
+    routeIds = routeIds.filter(rid => {
+      const m    = meta[rid]||{};
       const no   = String(m.RouteNo||rid).toLowerCase();
       const name = String(m.RouteName||"").toLowerCase();
       return no.includes(currentRouteSearch)||name.includes(currentRouteSearch);
@@ -758,35 +605,32 @@ function renderRouteBlocks(){
   routeCount.textContent = `Routes: ${routeIds.length}`;
 
   for (const rid of routeIds){
-    const m        = meta[rid]||{};
-    const routeNo  = m.RouteNo||rid;
-    const routeName= m.RouteName||"";
-
+    const m         = meta[rid]||{};
+    const routeNo   = m.RouteNo||rid;
+    const routeName = m.RouteName||"";
     const vars = Array.from(dayIndex.byRouteId.get(rid)||new Set(["NA"]))
       .sort((a,b)=>String(a).localeCompare(String(b),"en",{numeric:true}));
 
     const block = document.createElement("div");
     block.className = "routeBlock";
 
-    // header
     const head = document.createElement("div");
     head.className = "routeHead";
 
-    const btnCol    = document.createElement("div");
-    btnCol.className= "btnCol";
+    const btnCol = document.createElement("div");
+    btnCol.className = "btnCol";
 
     const toggleBtn = document.createElement("button");
-    const allVarKeys= vars.map(v=>rvKey(rid,v));
-    const updateToggleLabel = () => {
-      const allSel = allVarKeys.every(k=>selectedKeys.has(k));
-      toggleBtn.textContent = allSel ? "Deselect" : "Select";
+    const allVarKeys = vars.map(v=>rvKey(rid,v));
+    const refreshLabel = () => {
+      toggleBtn.textContent = allVarKeys.every(k=>selectedKeys.has(k)) ? "Deselect" : "Select";
     };
-    updateToggleLabel();
+    refreshLabel();
     toggleBtn.onclick = () => {
       if (filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
-      const allSel=allVarKeys.every(k=>selectedKeys.has(k));
-      if (allSel){ for (const k of allVarKeys) selectedKeys.delete(k); }
-      else        { for (const k of allVarKeys) selectedKeys.add(k); }
+      const allSel = allVarKeys.every(k=>selectedKeys.has(k));
+      if (allSel){ allVarKeys.forEach(k=>selectedKeys.delete(k)); }
+      else       { allVarKeys.forEach(k=>selectedKeys.add(k)); }
       if (selectedKeys.size===0) setFilterMode("none");
       if (selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
       renderRouteBlocks();
@@ -827,20 +671,19 @@ function renderRouteBlocks(){
     head.appendChild(infoCol);
     block.appendChild(head);
 
-    // var rows
     for (const v of vars){
-      const row    = document.createElement("div");
-      row.className= "routeVarRow";
+      const row = document.createElement("div");
+      row.className = "routeVarRow";
 
-      const cbCol    = document.createElement("div");
-      cbCol.className= "cbCol";
+      const cbCol = document.createElement("div");
+      cbCol.className = "cbCol";
 
-      const cb  = document.createElement("input");
-      cb.type   = "checkbox";
-      cb.checked= keyAllowed(rid,v);
-      cb.onchange= () => {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = keyAllowed(rid, v);
+      cb.onchange = () => {
         if (filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
-        const k=rvKey(rid,v);
+        const k = rvKey(rid,v);
         if (cb.checked) selectedKeys.add(k);
         else selectedKeys.delete(k);
         if (selectedKeys.size===0) setFilterMode("none");
@@ -851,8 +694,8 @@ function renderRouteBlocks(){
       cbCol.appendChild(cb);
 
       const lab = document.createElement("div");
-      lab.style.fontSize="11px";
-      lab.innerHTML=`<b>VarId</b>: <code>${v}</code>`;
+      lab.style.fontSize = "11px";
+      lab.innerHTML = `<b>VarId</b>: <code>${v}</code>`;
 
       row.appendChild(cbCol);
       row.appendChild(lab);
@@ -864,158 +707,253 @@ function renderRouteBlocks(){
 }
 
 // ---------------- Render layers ----------------
-function renderLayers(points,minute,linesData){
-  const layers=[];
-  const lineOpacity=clamp(+lineOpacitySel.value,0,100)/100;
-  const lineAlpha=Math.round(255*lineOpacity);
+function renderLayers(points, minute, linesData){
+  const layers = [];
+  const lineOpacity = clamp(+lineOpacitySel.value, 0, 100) / 100;
+  const lineAlpha   = Math.round(255 * lineOpacity);
+  const iconPx      = zoomToIconSize(+iconSizeSel.value);
+  const TRAIL_MAX   = +trailFramesSel.value;
 
-  if (showLinesChk.checked&&linesData&&linesData.length){
-    const filteredLines=linesData.filter(l=>keyAllowed(l.RouteId,l.RouteVarId));
+  // 1. Route lines (bottom-most)
+  if (showLinesChk.checked && linesData && linesData.length){
+    const filteredLines = linesData.filter(l=>keyAllowed(l.RouteId, l.RouteVarId));
     layers.push(new PathLayer({
-      id:"route-lines",
-      data:filteredLines,
-      coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPath:d=>d.path,
-      getWidth:+lineWidthSel.value,
-      widthUnits:"pixels",
-      getColor:d=>{ const c=colorByRouteId(d.RouteId); return [c[0],c[1],c[2],lineAlpha]; },
-      pickable:false,
-      parameters:{depthTest:false}
+      id: "route-lines",
+      data: filteredLines,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPath:      d => d.path,
+      getWidth:     zoomToLineWidth(+lineWidthSel.value),
+      widthUnits:   "pixels",
+      getColor:     d => { const c=colorByRouteId(d.RouteId); return [c[0],c[1],c[2],lineAlpha]; },
+      jointRounded: true,
+      capRounded:   true,
+      pickable:     false,
+      parameters:   {depthTest:false}
     }));
   }
 
+  // 2. Update vehicle trail history (only while playing)
+  if (showIconChk.checked && showTrailChk.checked && playing){
+    // Index current positions
+    const currentById = new Map();
+    for (const pt of points) currentById.set(vehicleId(pt), pt);
+
+    // Append current pos to each vehicle's queue
+    for (const [vid, pt] of currentById){
+      if (!vehicleTrail.has(vid)) vehicleTrail.set(vid, []);
+      const q = vehicleTrail.get(vid);
+      q.push([pt.lng, pt.lat]);
+      // Keep only TRAIL_MAX + 1 entries (tail + head)
+      while (q.length > TRAIL_MAX + 1) q.shift();
+    }
+
+    // Evict vehicles no longer in current frame
+    for (const vid of vehicleTrail.keys()){
+      if (!currentById.has(vid)) vehicleTrail.delete(vid);
+    }
+  }
+
+  // 3. Comet tail layer
+  if (showIconChk.checked && showTrailChk.checked && vehicleTrail.size > 0){
+    const tailData = [];
+    for (const [vid, queue] of vehicleTrail){
+      if (queue.length < 2) continue;
+      const routeId = vid.split(":")[0];
+      tailData.push({path: queue, routeId});
+    }
+
+    if (tailData.length > 0){
+      // Tail width tapers naturally because PathLayer renders the
+      // full path at one width; we use a slightly narrower value
+      // and rely on opacity + color lightening for the comet effect.
+      const tailWidth = Math.max(1.5, iconPx * 0.3);
+
+      layers.push(new PathLayer({
+        id: "comet-tails",
+        data: tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: tailWidth,
+        widthUnits: "pixels",
+        getColor: d => {
+          const c = colorByRouteId(d.routeId);
+          // Brighten the route color for a luminous comet glow
+          return [
+            Math.min(255, c[0] + 70),
+            Math.min(255, c[1] + 70),
+            Math.min(255, c[2] + 70),
+            160
+          ];
+        },
+        jointRounded: true,
+        capRounded:   true,
+        pickable:     false,
+        parameters:   {depthTest:false}
+      }));
+
+      // Inner bright core of the tail (thinner, more opaque, pure white-tinted)
+      layers.push(new PathLayer({
+        id: "comet-tails-core",
+        data: tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: Math.max(0.8, tailWidth * 0.35),
+        widthUnits: "pixels",
+        getColor: d => {
+          const c = colorByRouteId(d.routeId);
+          return [
+            Math.min(255, c[0] + 120),
+            Math.min(255, c[1] + 120),
+            Math.min(255, c[2] + 120),
+            220
+          ];
+        },
+        jointRounded: true,
+        capRounded:   true,
+        pickable:     false,
+        parameters:   {depthTest:false}
+      }));
+    }
+  }
+
+  // 4. Bus icons / scatter points (top-most)
   if (showIconChk.checked){
     layers.push(new IconLayer({
-      id:"bus-icons",
-      data:points,
-      coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition:d=>[d.lng,d.lat],
-      iconAtlas:BUS_ICON_URL,
-      iconMapping:ICON_MAPPING,
-      getIcon:()=>"bus",
-      sizeUnits:"pixels",
-      getSize:+iconSizeSel.value,
-      getColor:d=>colorByRouteId(d.RouteId),
-      pickable:false,
-      parameters:{depthTest:false}
+      id: "bus-icons",
+      data: points,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition: d => [d.lng, d.lat],
+      iconAtlas:   BUS_ICON_URL,
+      iconMapping: ICON_MAPPING,
+      getIcon:     () => "bus",
+      sizeUnits:   "pixels",
+      getSize:     iconPx,
+      getColor:    d => colorByRouteId(d.RouteId),
+      pickable:    false,
+      parameters:  {depthTest:false}
     }));
   } else {
-    const base=+pointSizeSel.value;
-    const meters=zoomToPointRadiusMeters(base*8);
+    const meters = zoomToPointRadiusMeters(+pointSizeSel.value * 8);
     layers.push(new ScatterplotLayer({
-      id:"bus-points",
-      data:points,
-      coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition:d=>[d.lng,d.lat],
-      radiusUnits:"meters",
-      getRadius:meters,
-      getFillColor:d=>colorByRouteId(d.RouteId),
-      pickable:false,
-      parameters:{depthTest:false}
+      id: "bus-points",
+      data: points,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition:  d => [d.lng, d.lat],
+      radiusUnits:  "meters",
+      getRadius:    meters,
+      getFillColor: d => colorByRouteId(d.RouteId),
+      pickable:     false,
+      parameters:   {depthTest:false}
     }));
   }
 
   overlay.setProps({layers});
 
-  // Friendly status bar
+  // Status bar
   statTime.textContent     = hhmm(minute);
   statVehicles.textContent = points.length;
   statFilter.textContent   = filterMode==="custom"
-    ? `custom (${selectedKeys.size} vars)`
-    : filterMode;
+    ? `custom (${selectedKeys.size} vars)` : filterMode;
 }
 
-// ---------------- Playback (toggle) ----------------
+// ---------------- Playback ----------------
 let timer   = null;
 let playing = false;
 
+function clearTrail(){
+  vehicleTrail.clear();
+}
 function stopPlay(){
   if (timer) clearInterval(timer);
-  timer=null;
-  playing=false;
-  btnPlayToggle.textContent="▶\u00a0\u00a0Play";
+  timer   = null;
+  playing = false;
+  clearTrail();
+  btnPlayToggle.textContent = "▶\u00a0\u00a0Play";
   btnPlayToggle.classList.remove("playing");
 }
 function startPlay(){
   stopPlay();
-  playing=true;
-  btnPlayToggle.textContent="⏸\u00a0\u00a0Pause";
+  playing = true;
+  btnPlayToggle.textContent = "⏸\u00a0\u00a0Pause";
   btnPlayToggle.classList.add("playing");
-  const speed=+speedSel.value;
-  timer=setInterval(()=>{
-    minuteSel.value=(+minuteSel.value+1)%1440;
+  const speed = +speedSel.value;
+  timer = setInterval(() => {
+    minuteSel.value = (+minuteSel.value + 1) % 1440;
     loadAndRender();
-  }, 1000/speed);
+  }, 1000 / speed);
 }
 
-btnPlayToggle.addEventListener("click",()=>{
+btnPlayToggle.addEventListener("click", () => {
   if (playing) stopPlay(); else startPlay();
 });
 
 // ---------------- Main ----------------
 async function loadAndRender(){
-  const day=daySel.value;
-  const minute=+minuteSel.value;
+  const day    = daySel.value;
+  const minute = +minuteSel.value;
 
-  labelEl.textContent    = hhmm(minute);
-  startTimeInp.value     = hhmm(minute);
-  iconSizeLabel.textContent   = iconSizeSel.value;
-  pointSizeLabel.textContent  = pointSizeSel.value;
-  lineWidthLabel.textContent  = lineWidthSel.value;
-  lineOpacityLabel.textContent= `${lineOpacitySel.value}%`;
+  labelEl.textContent          = hhmm(minute);
+  startTimeInp.value           = hhmm(minute);
+  iconSizeLabel.textContent    = iconSizeSel.value;
+  trailFramesLabel.textContent = trailFramesSel.value;
+  pointSizeLabel.textContent   = pointSizeSel.value;
+  lineWidthLabel.textContent   = lineWidthSel.value;
+  lineOpacityLabel.textContent = `${lineOpacitySel.value}%`;
 
   try{
-    const [csvText,idx,lines]=await Promise.all([
+    const [csvText, idx, lines] = await Promise.all([
       getDayCsv(day),
       getRouteVarIndexForDay(day),
       loadRouteLines()
     ]);
 
-    if (routesBox.dataset.day!==day){
-      routesBox.dataset.day=day;
+    if (routesBox.dataset.day !== day){
+      routesBox.dataset.day = day;
       await renderRouteCheckboxes(idx);
     }
 
-    const {points}=parseCsvMinute(csvText,minute);
-    renderLayers(points,minute,lines);
+    const {points} = parseCsvMinute(csvText, minute);
+    renderLayers(points, minute, lines);
 
   } catch(e){
     console.error(e);
-    statTime.textContent="Error";
-    statVehicles.textContent=e.message;
-    statFilter.textContent="";
+    statTime.textContent     = "Error";
+    statVehicles.textContent = e.message;
+    statFilter.textContent   = "";
     overlay.setProps({layers:[]});
   }
 }
 
 // ---------------- Events ----------------
-daySel.onchange    = async ()=>{ stopPlay(); await loadAndRender(); };
-minuteSel.oninput  = ()=>{ stopPlay(); loadAndRender(); };
-speedSel.onchange  = ()=>{ if (playing) startPlay(); };
+daySel.onchange   = async () => { clearTrail(); stopPlay(); await loadAndRender(); };
+minuteSel.oninput = ()        => { clearTrail(); stopPlay(); loadAndRender(); };
+speedSel.onchange = ()        => { if (playing) startPlay(); };
 
-showIconChk.onchange  = ()=>{ stopPlay(); loadAndRender(); };
-iconSizeSel.oninput   = ()=>{ loadAndRender(); };
-pointSizeSel.oninput  = ()=>{ loadAndRender(); };
-showLinesChk.onchange = ()=>{ loadAndRender(); };
-lineWidthSel.oninput  = ()=>{ loadAndRender(); };
-lineOpacitySel.oninput= ()=>{ loadAndRender(); };
+showIconChk.onchange   = () => { clearTrail(); stopPlay(); loadAndRender(); };
+showTrailChk.onchange  = () => { clearTrail(); loadAndRender(); };
+trailFramesSel.oninput = () => { clearTrail(); loadAndRender(); };
+iconSizeSel.oninput    = () => { loadAndRender(); };
+pointSizeSel.oninput   = () => { loadAndRender(); };
+showLinesChk.onchange  = () => { loadAndRender(); };
+lineWidthSel.oninput   = () => { loadAndRender(); };
+lineOpacitySel.oninput = () => { loadAndRender(); };
 
-btnAll.onclick  = async ()=>{
+btnAll.onclick  = async () => {
   setFilterMode("all");
-  const idx=await getRouteVarIndexForDay(daySel.value);
+  const idx = await getRouteVarIndexForDay(daySel.value);
   await renderRouteCheckboxes(idx);
   loadAndRender();
 };
-btnNone.onclick = async ()=>{
+btnNone.onclick = async () => {
   setFilterMode("none");
-  const idx=await getRouteVarIndexForDay(daySel.value);
+  const idx = await getRouteVarIndexForDay(daySel.value);
   await renderRouteCheckboxes(idx);
   loadAndRender();
 };
 
 // Jump-to with inline error
 function doJump(){
-  const v=parseHHMM(startTimeInp.value);
+  const v = parseHHMM(startTimeInp.value);
   if (v===null){
     startTimeInp.classList.add("error");
     timeError.classList.add("visible");
@@ -1023,22 +961,22 @@ function doJump(){
   }
   startTimeInp.classList.remove("error");
   timeError.classList.remove("visible");
-  stopPlay();
-  minuteSel.value=clamp(v,0,1439);
+  clearTrail(); stopPlay();
+  minuteSel.value = clamp(v, 0, 1439);
   loadAndRender();
 }
 goTimeBtn.onclick = doJump;
-startTimeInp.addEventListener("keydown",e=>{ if (e.key==="Enter") doJump(); });
-startTimeInp.addEventListener("input",()=>{
+startTimeInp.addEventListener("keydown", e => { if (e.key==="Enter") doJump(); });
+startTimeInp.addEventListener("input",   () => {
   startTimeInp.classList.remove("error");
   timeError.classList.remove("visible");
 });
 
-// Zoom -> point scaling (scatter mode)
-map.on("zoom",()=>{ if (!showIconChk.checked) loadAndRender(); });
+// Zoom → rescale icons, lines, scatter points
+map.on("zoom", () => { loadAndRender(); });
 
 // Start
-map.on("load", async ()=>{
+map.on("load", async () => {
   setFilterMode("all");
   await loadAndRender();
 });
