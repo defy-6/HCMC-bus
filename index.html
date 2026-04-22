@@ -701,20 +701,11 @@ const ROUTE_META_URL   = "data/routes_meta.json";
 const BUS_ICON_URL     = "assets/bus.png";
 const ICON_MAPPING     = {bus:{x:0,y:0,width:64,height:64,anchorY:64}};
 
-const csvCache  = new Map();
-let routeMeta   = null;
-let routeLines  = null;
-let routesByDay = new Map();
+let routeMeta  = null;
+let routeLines = null;
 
 async function fetchJson(u){ const r=await fetch(u); if(!r.ok) throw new Error(`Fetch failed: ${u}`); return r.json(); }
 async function getRouteMeta(){ if(routeMeta) return routeMeta; routeMeta=await fetchJson(ROUTE_META_URL).catch(e=>{console.warn(e);return{};}); return routeMeta; }
-
-async function getDayCsv(day){
-  if(csvCache.has(day)) return csvCache.get(day);
-  const u=`${DATA_BASE}/${day}.csv`;
-  const r=await fetch(u); if(!r.ok) throw new Error(`Fetch failed: ${u}`);
-  const t=await r.text(); csvCache.set(day,t); return t;
-}
 
 async function loadRouteLines(){
   if(routeLines) return routeLines;
@@ -732,25 +723,72 @@ async function loadRouteLines(){
   routeLines=out; return routeLines;
 }
 
-async function getRouteVarIndexForDay(day){
-  if(routesByDay.has(day)) return routesByDay.get(day);
-  const text=await getDayCsv(day);
-  const lines=text.trim().split("\n");
-  if(lines.length<=1){ const e={byRouteId:new Map(),allKeys:new Set()}; routesByDay.set(day,e); return e; }
-  const header=lines[0].split(",");
-  const iR=header.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const iV=header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  if(iR<0) throw new Error("CSV missing RouteId");
-  const byRouteId=new Map(),allKeys=new Set();
-  for(let i=1;i<lines.length;i++){
-    const c=lines[i].split(","); const rid=c[iR]; if(!rid) continue;
-    const R=String(rid);
-    const V=(iV>=0)?(((c[iV]??"")!=="")?String(c[iV]):"NA"):"NA";
-    if(!byRouteId.has(R)) byRouteId.set(R,new Set());
-    byRouteId.get(R).add(V); allKeys.add(rvKey(R,V));
+// ================================================================
+// DAY INDEX  — built ONCE per day on first load, never rebuilt.
+//
+// Structure:
+//   minuteMap : Map<minute, row[]>          O(1) lookup per frame
+//   byRouteId : Map<routeId, Set<varId>>    for route filter UI
+//   allKeys   : Set<rvKey string>           for filter logic
+//
+// Each row: {lng, lat, routeId, routeVarId, timeTableId, tripId}
+// Filtering (keyAllowed) is applied at query time, not at index time,
+// so changing the route filter never requires re-downloading or re-parsing.
+// ================================================================
+const dayIndexCache = new Map();
+
+async function getDayIndex(day){
+  if(dayIndexCache.has(day)) return dayIndexCache.get(day);
+
+  statTime.textContent = "Indexing…";
+
+  const u = `${DATA_BASE}/${day}.csv`;
+  const r = await fetch(u);
+  if(!r.ok) throw new Error(`Fetch failed: ${u}`);
+  const text = await r.text();
+
+  const lines = text.trim().split("\n");
+  if(lines.length <= 1){
+    const empty = {minuteMap:new Map(), byRouteId:new Map(), allKeys:new Set()};
+    dayIndexCache.set(day, empty);
+    return empty;
   }
-  const idx={byRouteId,allKeys}; routesByDay.set(day,idx); return idx;
+
+  const hdr  = lines[0].split(",");
+  const iMin = hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
+  const iLng = hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
+  const iLat = hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
+  const iR   = hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const iV   = hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+  const iTT  = hdr.findIndex(h=>h.trim().toLowerCase()==="timetableid");
+  const iT   = hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
+  if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error("CSV missing required columns");
+
+  const minuteMap = new Map();
+  const byRouteId = new Map();
+  const allKeys   = new Set();
+
+  for(let i=1; i<lines.length; i++){
+    const c   = lines[i].split(",");
+    const min = +c[iMin]; if(!Number.isFinite(min)) continue;
+    const rid = String(c[iR]??'').trim(); if(!rid) continue;
+    const rvid  = (iV>=0&&c[iV]?.trim())  ? String(c[iV].trim())  : "NA";
+    const lng   = +c[iLng], lat = +c[iLat];
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    const ttid   = (iTT>=0&&c[iTT]?.trim()) ? String(c[iTT].trim()) : "NA";
+    const tripId = (iT>=0 &&c[iT]?.trim())  ? String(c[iT].trim())  : "NA";
+    if(!minuteMap.has(min)) minuteMap.set(min, []);
+    minuteMap.get(min).push({lng, lat, routeId:rid, routeVarId:rvid, timeTableId:ttid, tripId});
+    if(!byRouteId.has(rid)) byRouteId.set(rid, new Set());
+    byRouteId.get(rid).add(rvid);
+    allKeys.add(rvKey(rid, rvid));
+  }
+
+  const idx = {minuteMap, byRouteId, allKeys};
+  dayIndexCache.set(day, idx);
+  return idx;
 }
+
 
 // ================================================================
 // FILTER STATE
@@ -781,35 +819,16 @@ function updateFilterStatus(){
 }
 
 // ================================================================
-// CSV PARSE
+// GET MINUTE FRAME  — O(1), reads directly from pre-built index
 // Vehicle unique key = RouteId|RouteVarId|TimeTableId|TripId
-// All four must match across frames to be treated as the same vehicle.
 // ================================================================
-function parseCsvMinute(csvText, targetMinute){
-  const lines = csvText.trim().split("\n");
-  if(lines.length <= 1) return new Map();
-  const hdr  = lines[0].split(",");
-  const iMin = hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
-  const iLng = hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
-  const iLat = hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
-  const iR   = hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const iV   = hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  const iTT  = hdr.findIndex(h=>h.trim().toLowerCase()==="timetableid");
-  const iT   = hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
-  if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error("CSV missing required columns");
+function getMinuteFrame(dayIndex, minute){
+  const rows = dayIndex.minuteMap.get(minute) ?? [];
   const result = new Map();
-  for(let i=1;i<lines.length;i++){
-    const c = lines[i].split(",");
-    if(+c[iMin]!==targetMinute) continue;
-    const rid  = String(c[iR]??'').trim();
-    const rvid = (iV>=0&&c[iV]?.trim()) ? String(c[iV].trim()) : "NA";
-    if(!keyAllowed(rid,rvid)) continue;
-    const lng=+c[iLng], lat=+c[iLat];
-    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-    const ttid   = (iTT>=0&&c[iTT]?.trim()) ? String(c[iTT].trim()) : "NA";
-    const tripId = (iT>=0&&c[iT]?.trim())   ? String(c[iT].trim())  : "NA";
-    const vehicleKey = `${rid}|${rvid}|${ttid}|${tripId}`;
-    result.set(vehicleKey, {lng, lat, routeId:rid, routeVarId:rvid, timeTableId:ttid, tripId, vehicleKey});
+  for(const d of rows){
+    if(!keyAllowed(d.routeId, d.routeVarId)) continue;
+    const vehicleKey = `${d.routeId}|${d.routeVarId}|${d.timeTableId}|${d.tripId}`;
+    result.set(vehicleKey, d);
   }
   return result;
 }
@@ -975,8 +994,8 @@ async function advanceMinute(minute){
   updateProgress();
   updateLabels();
   try{
-    const csvText=await getDayCsv(daySel.value);
-    const newFrame=parseCsvMinute(csvText,minute);
+    const dayIdx=await getDayIndex(daySel.value);
+    const newFrame=getMinuteFrame(dayIdx,minute);
     updateVehicleState(newFrame);
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
@@ -1004,10 +1023,10 @@ async function loadAndRender(){
   const day=daySel.value, minute=+minuteSlider.value;
   updateProgress(); updateLabels();
   try{
-    const[csvText,idx,lines]=await Promise.all([getDayCsv(day),getRouteVarIndexForDay(day),loadRouteLines()]);
+    const[dayIdx,lines]=await Promise.all([getDayIndex(day),loadRouteLines()]);
     cachedLines=lines;
-    if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(idx); }
-    const newFrame=parseCsvMinute(csvText,minute);
+    if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(dayIdx); }
+    const newFrame=getMinuteFrame(dayIdx,minute);
     clearVehicleState();
 
     for(const [vehicleKey, data] of newFrame){
