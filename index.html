@@ -522,7 +522,7 @@ const {MapboxOverlay} = deck;
 // ================================================================
 const map = new maplibregl.Map({
   container: "map",
-  style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
   center: [106.7, 10.77],
   zoom: 11
 });
@@ -538,475 +538,278 @@ const vehicleState = new Map();
 function clearVehicleState(){ vehicleState.clear(); }
 
 // ================================================================
-// INTERPOLATION ENGINE
+// VEHICLE STATE
+// Map<vehicleKey, {prevPos, currPos, heading, smoothTrail, routeId, routeVarId}>
+//
+// smoothTrail: dense array of [lng,lat] sampled every RAF tick during
+//              interpolation — gives a silky short tail with no jumps.
 // ================================================================
-let rafId = null;
-let interpT = 1;
-let interpDuration = 1000;
-let interpStartTime = null;
+const vehicleState = new Map();
+function clearVehicleState(){ vehicleState.clear(); }
+
+// ================================================================
+// PLAYBACK ENGINE
+//
+// Architecture: one continuous requestAnimationFrame loop.
+// setInterval is only used to fire "load next minute's data" at the
+// right wall-clock time. The RAF loop handles ALL rendering, which
+// means no jitter from timer drift and no frame drops between minutes.
+//
+//  globalT  : fractional minute within the current tick (0 → 1)
+//  minuteWall: performance.now() at the start of the current minute
+// ================================================================
+let rafId        = null;
+let playing      = false;
+let globalT      = 1;            // 1 = fully arrived at currPos
+let minuteWall   = 0;            // when the current minute tick started
+let tickDuration = 1000;         // ms per minute (= 1000 / speed)
+let loadTimer    = null;         // setInterval handle for data loading
+let cachedLines  = null;
 const interpBadge = document.getElementById("interpBadge");
 
-function startInterp(){
-  if(rafId) cancelAnimationFrame(rafId);
-  interpStartTime = performance.now();
-  interpBadge.classList.add("show");
-  function frame(now){
-    interpT = Math.min((now - interpStartTime) / interpDuration, 1);
-    renderLayersInterpolated(interpT);
-    if(interpT < 1) rafId = requestAnimationFrame(frame);
-    else { rafId = null; interpBadge.classList.remove("show"); }
+// Easing: ease-out cubic makes motion feel natural
+function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+// ================================================================
+// RAF LOOP — runs continuously while playing
+// ================================================================
+function rafLoop(now){
+  if(!playing){ rafId = null; return; }
+  rafId = requestAnimationFrame(rafLoop);
+
+  // Compute interpolation progress for this frame
+  const raw = Math.min((now - minuteWall) / tickDuration, 1);
+  globalT = easeOut(raw);
+
+  // Append current interpolated position to each vehicle's smooth trail
+  for(const vs of vehicleState.values()){
+    if(vs.trail.length === 0) continue;
+    const lng = lerp(vs.prevPos[0], vs.currPos[0], globalT);
+    const lat = lerp(vs.prevPos[1], vs.currPos[1], globalT);
+    // Only append if vehicle actually moved (avoids duplicate points for parked buses)
+    const last = vs.smoothTrail[vs.smoothTrail.length - 1];
+    if(!last || Math.abs(lng-last[0])>0.000005 || Math.abs(lat-last[1])>0.000005){
+      vs.smoothTrail.push([lng, lat]);
+    }
+    // Keep trail short: max 40 screen-sampled points (~0.7s at 60fps)
+    if(vs.smoothTrail.length > 40) vs.smoothTrail.shift();
   }
-  rafId = requestAnimationFrame(frame);
+
+  renderFrame(globalT);
 }
-function stopInterp(){
+
+function startRafLoop(){
+  if(rafId) return; // already running
+  rafId = requestAnimationFrame(rafLoop);
+  interpBadge.classList.add("show");
+}
+function stopRafLoop(){
   if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
   interpBadge.classList.remove("show");
-  interpT = 1;
+  globalT = 1;
 }
 
 // ================================================================
-// UI REFS
-// ================================================================
-const daySel           = document.getElementById("day");
-const minuteSlider     = document.getElementById("minuteSlider");
-const timeDisplay      = document.getElementById("timeDisplay");
-const progressLine     = document.getElementById("progressLine");
-const statTime         = document.getElementById("statTime");
-const statVehicles     = document.getElementById("statVehicles");
-const statFilter       = document.getElementById("statFilter");
-const btnPlayToggle    = document.getElementById("playToggle");
-const speedSel         = document.getElementById("speed");
-const showIconChk      = document.getElementById("showIcon");
-const iconSizeSel      = document.getElementById("iconSize");
-const iconSizeLabel    = document.getElementById("iconSizeLabel");
-const showTrailChk     = document.getElementById("showTrail");
-const trailFramesSel   = document.getElementById("trailFrames");
-const trailFramesLabel = document.getElementById("trailFramesLabel");
-const pointSizeSel     = document.getElementById("pointSize");
-const pointSizeLabel   = document.getElementById("pointSizeLabel");
-const showLinesChk     = document.getElementById("showLines");
-const lineWidthSel     = document.getElementById("lineWidth");
-const lineWidthLabel   = document.getElementById("lineWidthLabel");
-const lineOpacitySel   = document.getElementById("lineOpacity");
-const lineOpacityLabel = document.getElementById("lineOpacityLabel");
-const routesBox        = document.getElementById("routesBox");
-const selCount         = document.getElementById("selCount");
-const btnAll           = document.getElementById("selectAll");
-const btnNone          = document.getElementById("selectNone");
-const routeSearch      = document.getElementById("routeSearch");
-const filterBtn        = document.getElementById("filterBtn");
-const filterModal      = document.getElementById("filterModal");
-const modalBackdrop    = document.getElementById("modalBackdrop");
-const modalClose       = document.getElementById("modalClose");
-const displayToggle    = document.getElementById("displayToggle");
-const displayDrawer    = document.getElementById("displayDrawer");
-
-// ================================================================
-// UI INTERACTIONS
-// ================================================================
-
-// Display drawer toggle
-displayToggle.addEventListener("click",()=>{
-  const open = displayDrawer.classList.toggle("open");
-  displayToggle.classList.toggle("active", open);
-});
-
-// Filter modal
-filterBtn.addEventListener("click",()=>{ filterModal.classList.add("open"); filterBtn.classList.add("active"); });
-function closeModal(){ filterModal.classList.remove("open"); filterBtn.classList.remove("active"); }
-modalBackdrop.addEventListener("click", closeModal);
-modalClose.addEventListener("click", closeModal);
-
-// Inline time editor — click time display to jump
-timeDisplay.addEventListener("keydown", e=>{
-  if(e.key==="Enter"){
-    e.preventDefault();
-    const v = parseHHMM(timeDisplay.value);
-    if(v===null){ timeDisplay.classList.add("error"); return; }
-    timeDisplay.classList.remove("error");
-    timeDisplay.blur();
-    stopPlay(); clearVehicleState();
-    minuteSlider.value = clamp(v, 0, 1439);
-    updateProgress();
-    loadAndRender();
-  }
-  if(e.key==="Escape"){ timeDisplay.blur(); timeDisplay.classList.remove("error"); }
-});
-timeDisplay.addEventListener("input",()=>{ timeDisplay.classList.remove("error"); });
-timeDisplay.addEventListener("blur",()=>{ timeDisplay.value = hhmm(+minuteSlider.value); timeDisplay.classList.remove("error"); });
-
-// ================================================================
-// HELPERS
-// ================================================================
-function hhmm(m){ return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
-function parseHHMM(s){
-  const m=/^(\d{1,2}):(\d{2})$/.exec((s||"").trim());
-  if(!m) return null;
-  const hh=+m[1],mm=+m[2];
-  if(!Number.isFinite(hh)||!Number.isFinite(mm)||hh<0||hh>23||mm<0||mm>59) return null;
-  return hh*60+mm;
-}
-function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
-function lerp(a,b,t){ return a+(b-a)*t; }
-
-function bearing(from,to){
-  const[lng1,lat1]=from,[lng2,lat2]=to;
-  const dL=(lng2-lng1)*Math.PI/180;
-  const la1=lat1*Math.PI/180, la2=lat2*Math.PI/180;
-  const y=Math.sin(dL)*Math.cos(la2);
-  const x=Math.cos(la1)*Math.sin(la2)-Math.sin(la1)*Math.cos(la2)*Math.cos(dL);
-  return(Math.atan2(y,x)*180/Math.PI+360)%360;
-}
-
-function colorByRouteId(routeId){
-  const key=String(routeId); let h=0;
-  for(let i=0;i<key.length;i++) h=(h*31+key.charCodeAt(i))|0;
-  const hue=(h>>>0)%360;
-  const sat=65+(((h>>>8)&0xff)%25);
-  const lit=38+(((h>>>16)&0xff)%18);
-  const s=sat/100,l=lit/100;
-  const a2=s*Math.min(l,1-l);
-  const f=n=>{const k=(n+hue/30)%12;return l-a2*Math.max(-1,Math.min(k-3,9-k,1));};
-  return[Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255),220];
-}
-
-function zoomToIconSize(b){ const z=map.getZoom(); return Math.max(4,b*Math.pow(2,(z-12)*0.7)); }
-function zoomToLineWidth(b){ const z=map.getZoom(); return Math.max(0.5,b*Math.pow(2,(z-12)*0.7)); }
-function zoomToPointR(b){ const z=map.getZoom(); return Math.max(1,b*Math.pow(2,(z-12)*0.35)); }
-
-// Zoom-based line opacity: fade out route lines when zoomed out (crowded), full at zoom 13+
-function zoomLineAlpha(baseAlpha){
-  const z=map.getZoom();
-  const factor=clamp((z-9)/4,0,1); // 0 at zoom9, 1 at zoom13+
-  return Math.round(baseAlpha*factor);
-}
-
-function rvKey(rid,rvid){
-  return `${String(rid)}:${(rvid===undefined||rvid===null||rvid==="")?'NA':String(rvid)}`;
-}
-
-// Progress bar update
-function updateProgress(){
-  const pct=(+minuteSlider.value/1439)*100;
-  progressLine.style.width=pct+"%";
-  timeDisplay.value=hhmm(+minuteSlider.value);
-}
-
-// ================================================================
-// FILES / CACHES
-// ================================================================
-const DATA_BASE        = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
-const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
-const ROUTE_META_URL   = "data/routes_meta.json";
-const BUS_ICON_URL     = "assets/bus.png";
-const ICON_MAPPING     = {bus:{x:0,y:0,width:64,height:64,anchorY:64}};
-
-let routeMeta  = null;
-let routeLines = null;
-
-async function fetchJson(u){ const r=await fetch(u); if(!r.ok) throw new Error(`Fetch failed: ${u}`); return r.json(); }
-async function getRouteMeta(){ if(routeMeta) return routeMeta; routeMeta=await fetchJson(ROUTE_META_URL).catch(e=>{console.warn(e);return{};}); return routeMeta; }
-
-async function loadRouteLines(){
-  if(routeLines) return routeLines;
-  const gj=await fetchJson(LINE_GEOJSON_URL).catch(e=>{console.warn(e);return{features:[]};});
-  const out=[];
-  for(const f of(gj.features||[])){
-    const p=f.properties||{},g=f.geometry||{};
-    const rid=p.RouteId??p.routeid??p.route_id??p.ROUTEID;
-    const rvid=p.RouteVarId??p.routevarid??p.route_var_id??p.ROUTEVARID;
-    if(!rid) continue;
-    const RV=(rvid??"")!==""?String(rvid):"NA";
-    if(g.type==="LineString") out.push({RouteId:String(rid),RouteVarId:RV,path:g.coordinates});
-    else if(g.type==="MultiLineString") for(const c of g.coordinates) out.push({RouteId:String(rid),RouteVarId:RV,path:c});
-  }
-  routeLines=out; return routeLines;
-}
-
-// ================================================================
-// DAY INDEX  — built ONCE per day on first load, never rebuilt.
-//
-// Structure:
-//   minuteMap : Map<minute, row[]>          O(1) lookup per frame
-//   byRouteId : Map<routeId, Set<varId>>    for route filter UI
-//   allKeys   : Set<rvKey string>           for filter logic
-//
-// Each row: {lng, lat, routeId, routeVarId, timeTableId, tripId}
-// Filtering (keyAllowed) is applied at query time, not at index time,
-// so changing the route filter never requires re-downloading or re-parsing.
-// ================================================================
-const dayIndexCache = new Map();
-
-async function getDayIndex(day){
-  if(dayIndexCache.has(day)) return dayIndexCache.get(day);
-
-  statTime.textContent = "Indexing…";
-
-  const u = `${DATA_BASE}/${day}.csv`;
-  const r = await fetch(u);
-  if(!r.ok) throw new Error(`Fetch failed: ${u}`);
-  const text = await r.text();
-
-  const lines = text.trim().split("\n");
-  if(lines.length <= 1){
-    const empty = {minuteMap:new Map(), byRouteId:new Map(), allKeys:new Set()};
-    dayIndexCache.set(day, empty);
-    return empty;
-  }
-
-  const hdr  = lines[0].split(",");
-  const iMin = hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
-  const iLng = hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
-  const iLat = hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
-  const iR   = hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const iV   = hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  const iTT  = hdr.findIndex(h=>h.trim().toLowerCase()==="timetableid");
-  const iT   = hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
-  if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error("CSV missing required columns");
-
-  const minuteMap = new Map();
-  const byRouteId = new Map();
-  const allKeys   = new Set();
-
-  for(let i=1; i<lines.length; i++){
-    const c   = lines[i].split(",");
-    const min = +c[iMin]; if(!Number.isFinite(min)) continue;
-    const rid = String(c[iR]??'').trim(); if(!rid) continue;
-    const rvid  = (iV>=0&&c[iV]?.trim())  ? String(c[iV].trim())  : "NA";
-    const lng   = +c[iLng], lat = +c[iLat];
-    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-    const ttid   = (iTT>=0&&c[iTT]?.trim()) ? String(c[iTT].trim()) : "NA";
-    const tripId = (iT>=0 &&c[iT]?.trim())  ? String(c[iT].trim())  : "NA";
-    if(!minuteMap.has(min)) minuteMap.set(min, []);
-    minuteMap.get(min).push({lng, lat, routeId:rid, routeVarId:rvid, timeTableId:ttid, tripId});
-    if(!byRouteId.has(rid)) byRouteId.set(rid, new Set());
-    byRouteId.get(rid).add(rvid);
-    allKeys.add(rvKey(rid, rvid));
-  }
-
-  const idx = {minuteMap, byRouteId, allKeys};
-  dayIndexCache.set(day, idx);
-  return idx;
-}
-
-
-// ================================================================
-// FILTER STATE
-// ================================================================
-let filterMode   = "all";
-let selectedKeys = new Set();
-let totalRouteVarCount = 0;
-
-function setFilterMode(mode){
-  filterMode=mode;
-  if(mode!=="custom") selectedKeys=new Set();
-  updateFilterStatus();
-}
-function keyAllowed(rid,rvid){
-  if(filterMode==="all") return true;
-  if(filterMode==="none") return false;
-  return selectedKeys.has(rvKey(rid,rvid));
-}
-function updateFilterStatus(){
-  // Status in panel
-  if(filterMode==="all") statFilter.textContent="all";
-  else if(filterMode==="none") statFilter.textContent="none";
-  else statFilter.textContent=`${selectedKeys.size} vars`;
-
-  // Count in modal toolbar
-  const sel = filterMode==="all" ? totalRouteVarCount : filterMode==="none" ? 0 : selectedKeys.size;
-  selCount.innerHTML=`<b>${sel}</b> / ${totalRouteVarCount} selected`;
-}
-
-// ================================================================
-// GET MINUTE FRAME  — O(1), reads directly from pre-built index
-// Vehicle unique key = RouteId|RouteVarId|TimeTableId|TripId
-// ================================================================
-function getMinuteFrame(dayIndex, minute){
-  const rows = dayIndex.minuteMap.get(minute) ?? [];
-  const result = new Map();
-  for(const d of rows){
-    if(!keyAllowed(d.routeId, d.routeVarId)) continue;
-    const vehicleKey = `${d.routeId}|${d.routeVarId}|${d.timeTableId}|${d.tripId}`;
-    result.set(vehicleKey, d);
-  }
-  return result;
-}
-
-
-// ================================================================
-// VEHICLE STATE UPDATE
+// VEHICLE STATE UPDATE  (called each minute tick)
 // ================================================================
 function updateVehicleState(newFrame){
-  const TRAIL_MAX = +trailFramesSel.value;
-  const active    = new Set(newFrame.keys()); // keys are now composite vehicleKey
+  const active = new Set(newFrame.keys());
+
   for(const [vehicleKey, data] of newFrame){
     if(vehicleState.has(vehicleKey)){
       const vs   = vehicleState.get(vehicleKey);
       const prev = vs.currPos;
       const curr = [data.lng, data.lat];
-      const moved = Math.abs(curr[0]-prev[0]) > 0.00001 || Math.abs(curr[1]-prev[1]) > 0.00001;
+      const moved = Math.abs(curr[0]-prev[0]) > 0.000005 || Math.abs(curr[1]-prev[1]) > 0.000005;
       vs.prevPos = prev;
       vs.currPos = curr;
       if(moved) vs.heading = bearing(prev, curr);
-      if(showTrailChk.checked){
-        vs.trail.push([...prev]);
-        while(vs.trail.length > TRAIL_MAX) vs.trail.shift();
-      }
+      // Seed trail with last known position so it starts from where the bus was
+      if(vs.smoothTrail.length === 0) vs.smoothTrail.push([...prev]);
+      // Mark trail as needing continuation (reset growth from this new prev)
     } else {
-      // New vehicle entering the frame
       vehicleState.set(vehicleKey, {
-        prevPos:    [data.lng, data.lat],
-        currPos:    [data.lng, data.lat],
-        heading:    0,
-        trail:      [],
-        routeId:    data.routeId,
-        routeVarId: data.routeVarId,
+        prevPos:     [data.lng, data.lat],
+        currPos:     [data.lng, data.lat],
+        heading:     0,
+        smoothTrail: [],
+        routeId:     data.routeId,
+        routeVarId:  data.routeVarId,
+        trail:       [], // keep for compat, unused now
       });
     }
   }
-  // Remove vehicles that left this minute
+
   for(const key of vehicleState.keys()){
     if(!active.has(key)) vehicleState.delete(key);
   }
 }
 
-
-function getInterpolatedPoints(t){
-  const pts=[];
-  for(const[,vs] of vehicleState){
-    pts.push({
-      lng:lerp(vs.prevPos[0],vs.currPos[0],t),
-      lat:lerp(vs.prevPos[1],vs.currPos[1],t),
-      heading:vs.heading, routeId:vs.routeId
-    });
-  }
-  return pts;
-}
-
 // ================================================================
-// RENDER LAYERS
+// RENDER FRAME
 // ================================================================
-let cachedLines=null;
+function renderFrame(t){
+  const layers = [];
+  const baseAlpha = Math.round(255 * clamp(+lineOpacitySel.value,0,100)/100);
+  const lineAlpha = zoomLineAlpha(baseAlpha);
+  const iconPx    = zoomToIconSize(+iconSizeSel.value);
 
-function renderLayersInterpolated(t){
-  const layers=[];
-  const baseAlpha=Math.round(255*clamp(+lineOpacitySel.value,0,100)/100);
-  const lineAlpha=zoomLineAlpha(baseAlpha);   // fade out at low zoom
-  const iconPx=zoomToIconSize(+iconSizeSel.value);
-
-  // 1. Route lines — zoom-adaptive opacity + selected/unselected contrast
-  if(showLinesChk.checked&&cachedLines&&cachedLines.length){
-    const fl=cachedLines.filter(l=>keyAllowed(l.RouteId,l.RouteVarId));
+  // 1. Route lines (light map: darker lines for contrast)
+  if(showLinesChk.checked && cachedLines && cachedLines.length){
+    const fl = cachedLines.filter(l => keyAllowed(l.RouteId, l.RouteVarId));
     layers.push(new PathLayer({
-      id:"route-lines",data:fl,
-      coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPath:d=>d.path,
-      getWidth:zoomToLineWidth(+lineWidthSel.value),
-      widthUnits:"pixels",
-      getColor:d=>{
-        const c=colorByRouteId(d.RouteId);
-        // If custom filter: selected routes full opacity, others at 30%
-        const alpha=(filterMode==="custom"&&!selectedKeys.has(rvKey(d.RouteId,d.RouteVarId)))
-          ?Math.round(lineAlpha*0.3):lineAlpha;
-        return[c[0],c[1],c[2],alpha];
+      id:"route-lines", data:fl,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPath:  d => d.path,
+      getWidth: zoomToLineWidth(+lineWidthSel.value),
+      widthUnits: "pixels",
+      getColor: d => {
+        const c = colorByRouteId(d.RouteId);
+        const alpha = (filterMode==="custom" && !selectedKeys.has(rvKey(d.RouteId,d.RouteVarId)))
+          ? Math.round(lineAlpha*0.25) : lineAlpha;
+        return [c[0], c[1], c[2], alpha];
       },
-      jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
+      jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
     }));
   }
 
-  // 2. Comet tails
+  // 2. Smooth comet tails (from RAF-sampled smoothTrail)
   if(showTrailChk.checked){
-    const tailData=[];
-    for(const[,vs] of vehicleState){
-      if(vs.trail.length<1) continue;
-      const ip=[lerp(vs.prevPos[0],vs.currPos[0],t),lerp(vs.prevPos[1],vs.currPos[1],t)];
-      tailData.push({path:[...vs.trail,ip],routeId:vs.routeId});
+    const tailData = [];
+    for(const vs of vehicleState.values()){
+      if(vs.smoothTrail.length < 2) continue;
+      tailData.push({path: vs.smoothTrail, routeId: vs.routeId});
     }
     if(tailData.length){
-      const tw=Math.max(1.5,iconPx*0.3);
+      const tw = Math.max(1.2, iconPx * 0.25);
+      // Outer glow
       layers.push(new PathLayer({
-        id:"comet-tails",data:tailData,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-        getPath:d=>d.path,getWidth:tw,widthUnits:"pixels",
-        getColor:d=>{const c=colorByRouteId(d.routeId);return[Math.min(255,c[0]+70),Math.min(255,c[1]+70),Math.min(255,c[2]+70),150];},
-        jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
+        id:"comet-tails", data:tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: tw, widthUnits:"pixels",
+        getColor: d => { const c=colorByRouteId(d.routeId); return[c[0],c[1],c[2],100]; },
+        jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
       }));
+      // Bright core
       layers.push(new PathLayer({
-        id:"comet-core",data:tailData,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-        getPath:d=>d.path,getWidth:Math.max(0.8,tw*0.35),widthUnits:"pixels",
-        getColor:d=>{const c=colorByRouteId(d.routeId);return[Math.min(255,c[0]+120),Math.min(255,c[1]+120),Math.min(255,c[2]+120),220];},
-        jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
+        id:"comet-core", data:tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: Math.max(0.8, tw*0.4), widthUnits:"pixels",
+        getColor: d => { const c=colorByRouteId(d.routeId); return[Math.min(255,c[0]+60),Math.min(255,c[1]+60),Math.min(255,c[2]+60),180]; },
+        jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
       }));
     }
   }
 
   // 3. Vehicle icons / scatter
-  const pts=getInterpolatedPoints(t);
+  const pts = [];
+  for(const vs of vehicleState.values()){
+    pts.push({
+      lng:     lerp(vs.prevPos[0], vs.currPos[0], t),
+      lat:     lerp(vs.prevPos[1], vs.currPos[1], t),
+      heading: vs.heading,
+      routeId: vs.routeId,
+    });
+  }
+
   if(showIconChk.checked){
     layers.push(new IconLayer({
-      id:"bus-icons",data:pts,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition:d=>[d.lng,d.lat],
-      iconAtlas:BUS_ICON_URL,iconMapping:ICON_MAPPING,getIcon:()=>"bus",
-      sizeUnits:"pixels",getSize:iconPx,
-      getColor:d=>colorByRouteId(d.routeId),
-      getAngle:d=>d.heading,
-      pickable:false,parameters:{depthTest:false}
+      id:"bus-icons", data:pts,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition: d => [d.lng, d.lat],
+      iconAtlas:   BUS_ICON_URL,
+      iconMapping: ICON_MAPPING,
+      getIcon:     () => "bus",
+      sizeUnits:   "pixels",
+      getSize:     iconPx,
+      getColor:    d => colorByRouteId(d.routeId),
+      getAngle:    d => d.heading,
+      pickable:    false,
+      parameters:  {depthTest:false}
     }));
   } else {
     layers.push(new ScatterplotLayer({
-      id:"bus-pts",data:pts,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition:d=>[d.lng,d.lat],
-      radiusUnits:"meters",getRadius:zoomToPointR(+pointSizeSel.value*8),
-      getFillColor:d=>colorByRouteId(d.routeId),
-      pickable:false,parameters:{depthTest:false}
+      id:"bus-pts", data:pts,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition:  d => [d.lng, d.lat],
+      radiusUnits:  "meters",
+      getRadius:    zoomToPointR(+pointSizeSel.value*8),
+      getFillColor: d => colorByRouteId(d.routeId),
+      pickable:     false,
+      parameters:   {depthTest:false}
     }));
   }
 
   overlay.setProps({layers});
 }
 
-// ================================================================
-// PLAYBACK
-// ================================================================
-let timer=null, playing=false;
+// Alias for non-playing scrub use
+function renderLayersInterpolated(t){ renderFrame(t); }
 
+// ================================================================
+// PLAYBACK CONTROL
+// ================================================================
 function stopPlay(){
-  if(timer) clearInterval(timer);
-  timer=null; playing=false; stopInterp();
-  btnPlayToggle.innerHTML="▶"; btnPlayToggle.classList.remove("playing");
+  clearInterval(loadTimer); loadTimer = null;
+  stopRafLoop();
+  playing = false;
+  btnPlayToggle.innerHTML = "▶";
+  btnPlayToggle.classList.remove("playing");
 }
-function startPlay(){
-  stopPlay(); playing=true;
-  btnPlayToggle.innerHTML="⏸"; btnPlayToggle.classList.add("playing");
-  interpDuration=1000/+speedSel.value;
-  timer=setInterval(async()=>{
-    minuteSlider.value=(+minuteSlider.value+1)%1440;
+
+async function startPlay(){
+  stopPlay();
+  playing = true;
+  btnPlayToggle.innerHTML = "⏸";
+  btnPlayToggle.classList.add("playing");
+  tickDuration = 1000 / +speedSel.value;
+
+  // Immediately load next minute's data, synced to wall clock
+  async function tick(){
+    minuteWall = performance.now();
+    minuteSlider.value = (+minuteSlider.value + 1) % 1440;
     updateProgress();
-    await advanceMinute(+minuteSlider.value);
-  }, interpDuration);
+    try{
+      const dayIdx   = await getDayIndex(daySel.value);
+      const newFrame = getMinuteFrame(dayIdx, +minuteSlider.value);
+      updateVehicleState(newFrame);
+      statTime.textContent     = hhmm(+minuteSlider.value);
+      statVehicles.textContent = vehicleState.size;
+    } catch(e){ console.error(e); }
+  }
+
+  // Fire first tick immediately, then on interval
+  await tick();
+  startRafLoop();
+  loadTimer = setInterval(tick, tickDuration);
 }
-btnPlayToggle.addEventListener("click",()=>{ if(playing) stopPlay(); else startPlay(); });
+
+btnPlayToggle.addEventListener("click", ()=>{ if(playing) stopPlay(); else startPlay(); });
 
 // ================================================================
-// ADVANCE MINUTE
+// ADVANCE MINUTE (scrubbing — no RAF loop)
 // ================================================================
 async function advanceMinute(minute){
-  updateProgress();
-  updateLabels();
+  updateProgress(); updateLabels();
   try{
-    const dayIdx=await getDayIndex(daySel.value);
-    const newFrame=getMinuteFrame(dayIdx,minute);
+    const dayIdx   = await getDayIndex(daySel.value);
+    const newFrame = getMinuteFrame(dayIdx, minute);
+    // On scrub: jump directly, clear smooth trails to avoid stale paths
+    for(const vs of vehicleState.values()) vs.smoothTrail = [];
     updateVehicleState(newFrame);
-    statTime.textContent=hhmm(minute);
-    statVehicles.textContent=vehicleState.size;
-    if(playing) startInterp();
-    else { stopInterp(); renderLayersInterpolated(1); }
+    statTime.textContent     = hhmm(minute);
+    statVehicles.textContent = vehicleState.size;
+    globalT = 1;
+    renderFrame(1);
   } catch(e){
     console.error(e);
     statTime.textContent="Error"; statVehicles.textContent=e.message;
     overlay.setProps({layers:[]});
   }
 }
+
 
 function updateLabels(){
   iconSizeLabel.textContent    = iconSizeSel.value;
@@ -1030,13 +833,13 @@ async function loadAndRender(){
     clearVehicleState();
 
     for(const [vehicleKey, data] of newFrame){
-      vehicleState.set(vehicleKey, {prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
+      vehicleState.set(vehicleKey, {prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,smoothTrail:[],trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
     }
 
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
     updateFilterStatus();
-    renderLayersInterpolated(1);
+    renderFrame(1);
   } catch(e){
     console.error(e); statTime.textContent="Error"; statVehicles.textContent=e.message;
     overlay.setProps({layers:[]});
@@ -1108,7 +911,7 @@ function rebuildRouteList(){
       else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
       updateFilterStatus();
       rebuildRouteList();
-      renderLayersInterpolated(interpT);
+      renderFrame(globalT);
     };
 
     topRow.appendChild(chip);
@@ -1138,7 +941,7 @@ function rebuildRouteList(){
         else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
         updateFilterStatus();
         rebuildRouteList();
-        renderLayersInterpolated(interpT);
+        renderFrame(globalT);
       };
       varsRow.appendChild(vc);
     }
@@ -1157,27 +960,27 @@ minuteSlider.oninput=async()=>{ stopPlay(); updateProgress(); await advanceMinut
 
 speedSel.onchange=()=>{ interpDuration=1000/+speedSel.value; if(playing) startPlay(); };
 
-showIconChk.onchange   =()=>{ stopInterp(); renderLayersInterpolated(interpT); };
-showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.trail=[]; stopInterp(); renderLayersInterpolated(interpT); };
-trailFramesSel.oninput =()=>{ renderLayersInterpolated(interpT); };
-iconSizeSel.oninput    =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
-pointSizeSel.oninput   =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
-showLinesChk.onchange  =()=>{ renderLayersInterpolated(interpT); };
-lineWidthSel.oninput   =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
-lineOpacitySel.oninput =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
+showIconChk.onchange   =()=>{ stopRafLoop(); renderFrame(globalT); };
+showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.smoothTrail=[]; stopRafLoop(); renderFrame(globalT); };
+trailFramesSel.oninput =()=>{ renderFrame(globalT); };
+iconSizeSel.oninput    =()=>{ updateLabels(); renderFrame(globalT); };
+pointSizeSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
+showLinesChk.onchange  =()=>{ renderFrame(globalT); };
+lineWidthSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
+lineOpacitySel.oninput =()=>{ updateLabels(); renderFrame(globalT); };
 
 btnAll.onclick=async()=>{
   setFilterMode("all");
   rebuildRouteList();
-  renderLayersInterpolated(interpT);
+  renderFrame(globalT);
 };
 btnNone.onclick=async()=>{
   setFilterMode("none");
   rebuildRouteList();
-  renderLayersInterpolated(interpT);
+  renderFrame(globalT);
 };
 
-map.on("zoom",()=>{ renderLayersInterpolated(interpT); });
+map.on("zoom",()=>{ renderFrame(globalT); });
 map.on("load",async()=>{ setFilterMode("all"); await loadAndRender(); });
 </script>
 </body>
