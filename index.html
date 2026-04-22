@@ -781,57 +781,77 @@ function updateFilterStatus(){
 }
 
 // ================================================================
-// CSV PARSE — TripId-aware
+// CSV PARSE
+// Vehicle unique key = RouteId|RouteVarId|TimeTableId|TripId
+// All four must match across frames to be treated as the same vehicle.
 // ================================================================
 function parseCsvMinute(csvText, targetMinute){
-  const lines=csvText.trim().split("\n");
-  if(lines.length<=1) return new Map();
-  const hdr=lines[0].split(",");
-  const iMin=hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
-  const iLng=hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
-  const iLat=hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
-  const iR  =hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const iV  =hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  const iT  =hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
+  const lines = csvText.trim().split("\n");
+  if(lines.length <= 1) return new Map();
+  const hdr  = lines[0].split(",");
+  const iMin = hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
+  const iLng = hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
+  const iLat = hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
+  const iR   = hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const iV   = hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+  const iTT  = hdr.findIndex(h=>h.trim().toLowerCase()==="timetableid");
+  const iT   = hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
   if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error("CSV missing required columns");
-  const result=new Map();
+  const result = new Map();
   for(let i=1;i<lines.length;i++){
-    const c=lines[i].split(",");
+    const c = lines[i].split(",");
     if(+c[iMin]!==targetMinute) continue;
-    const rid=String(c[iR]);
-    const rvid=(iV>=0)?(((c[iV]??"")!=="")?String(c[iV]):"NA"):"NA";
+    const rid  = String(c[iR]??'').trim();
+    const rvid = (iV>=0&&c[iV]?.trim()) ? String(c[iV].trim()) : "NA";
     if(!keyAllowed(rid,rvid)) continue;
-    const lng=+c[iLng],lat=+c[iLat];
+    const lng=+c[iLng], lat=+c[iLat];
     if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-    const tripId=(iT>=0&&c[iT]?.trim())?String(c[iT].trim()):`${rid}:${rvid}:${lng.toFixed(3)}:${lat.toFixed(3)}`;
-    result.set(tripId,{lng,lat,routeId:rid,routeVarId:rvid,tripId});
+    const ttid   = (iTT>=0&&c[iTT]?.trim()) ? String(c[iTT].trim()) : "NA";
+    const tripId = (iT>=0&&c[iT]?.trim())   ? String(c[iT].trim())  : "NA";
+    const vehicleKey = `${rid}|${rvid}|${ttid}|${tripId}`;
+    result.set(vehicleKey, {lng, lat, routeId:rid, routeVarId:rvid, timeTableId:ttid, tripId, vehicleKey});
   }
   return result;
 }
+
 
 // ================================================================
 // VEHICLE STATE UPDATE
 // ================================================================
 function updateVehicleState(newFrame){
-  const TRAIL_MAX=+trailFramesSel.value;
-  const active=new Set(newFrame.keys());
-  for(const[tripId,data] of newFrame){
-    if(vehicleState.has(tripId)){
-      const vs=vehicleState.get(tripId);
-      const prev=vs.currPos, curr=[data.lng,data.lat];
-      const moved=Math.abs(curr[0]-prev[0])>0.00001||Math.abs(curr[1]-prev[1])>0.00001;
-      vs.prevPos=prev; vs.currPos=curr;
-      if(moved) vs.heading=bearing(prev,curr);
-      if(showTrailChk.checked){ vs.trail.push([...prev]); while(vs.trail.length>TRAIL_MAX) vs.trail.shift(); }
+  const TRAIL_MAX = +trailFramesSel.value;
+  const active    = new Set(newFrame.keys()); // keys are now composite vehicleKey
+  for(const [vehicleKey, data] of newFrame){
+    if(vehicleState.has(vehicleKey)){
+      const vs   = vehicleState.get(vehicleKey);
+      const prev = vs.currPos;
+      const curr = [data.lng, data.lat];
+      const moved = Math.abs(curr[0]-prev[0]) > 0.00001 || Math.abs(curr[1]-prev[1]) > 0.00001;
+      vs.prevPos = prev;
+      vs.currPos = curr;
+      if(moved) vs.heading = bearing(prev, curr);
+      if(showTrailChk.checked){
+        vs.trail.push([...prev]);
+        while(vs.trail.length > TRAIL_MAX) vs.trail.shift();
+      }
     } else {
-      vehicleState.set(tripId,{
-        prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],
-        heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId
+      // New vehicle entering the frame
+      vehicleState.set(vehicleKey, {
+        prevPos:    [data.lng, data.lat],
+        currPos:    [data.lng, data.lat],
+        heading:    0,
+        trail:      [],
+        routeId:    data.routeId,
+        routeVarId: data.routeVarId,
       });
     }
   }
-  for(const tid of vehicleState.keys()) if(!active.has(tid)) vehicleState.delete(tid);
+  // Remove vehicles that left this minute
+  for(const key of vehicleState.keys()){
+    if(!active.has(key)) vehicleState.delete(key);
+  }
 }
+
 
 function getInterpolatedPoints(t){
   const pts=[];
@@ -989,8 +1009,11 @@ async function loadAndRender(){
     if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(idx); }
     const newFrame=parseCsvMinute(csvText,minute);
     clearVehicleState();
-    for(const[tid,data] of newFrame){
-      vehicleState.set(tid,{prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
+
+    for(const [vehicleKey, data] of newFrame){
+      vehicleState.set(vehicleKey, {prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
+    }
+
     }
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
@@ -1051,17 +1074,20 @@ function rebuildRouteList(){
     const name=document.createElement("span"); name.className="route-name";
     name.textContent=routeName;
 
-    const allSel=allVarKeys.every(k=>keyAllowed(rid,k.split(":")[1]));
+    const allSel=allVarKeys.every(k=>selectedKeys.has(k)||(filterMode==="all"));
     const toggleBtn=document.createElement("button");
     toggleBtn.className="route-toggle-btn"+(allSel?" selected":"");
     toggleBtn.textContent=allSel?"✓ Selected":"Select all";
     toggleBtn.onclick=()=>{
-      if(filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
+      if(filterMode!=="custom"){
+        setFilterMode("custom");
+        selectedKeys=new Set(dayIndex.allKeys); // start fully selected, then deselect this route
+      }
       const nowSel=allVarKeys.every(k=>selectedKeys.has(k));
       if(nowSel) allVarKeys.forEach(k=>selectedKeys.delete(k));
       else allVarKeys.forEach(k=>selectedKeys.add(k));
       if(selectedKeys.size===0) setFilterMode("none");
-      if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+      else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
       updateFilterStatus();
       rebuildRouteList();
       renderLayersInterpolated(interpT);
@@ -1084,10 +1110,14 @@ function rebuildRouteList(){
       vc.appendChild(dot);
       vc.appendChild(document.createTextNode(`Var ${v}`));
       vc.onclick=()=>{
-        if(filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(dayIndex.allKeys); }
+        // First click from "all" mode: keep everything selected, then toggle this key
+        if(filterMode!=="custom"){
+          setFilterMode("custom");
+          selectedKeys=new Set(dayIndex.allKeys); // start from all-selected, then toggle
+        }
         if(selectedKeys.has(k)) selectedKeys.delete(k); else selectedKeys.add(k);
         if(selectedKeys.size===0) setFilterMode("none");
-        if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+        else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
         updateFilterStatus();
         rebuildRouteList();
         renderLayersInterpolated(interpT);
@@ -1120,14 +1150,12 @@ lineOpacitySel.oninput =()=>{ updateLabels(); renderLayersInterpolated(interpT);
 
 btnAll.onclick=async()=>{
   setFilterMode("all");
-  const idx=await getRouteVarIndexForDay(daySel.value);
-  await renderRouteBlocks(idx);
+  rebuildRouteList();
   renderLayersInterpolated(interpT);
 };
 btnNone.onclick=async()=>{
   setFilterMode("none");
-  const idx=await getRouteVarIndexForDay(daySel.value);
-  await renderRouteBlocks(idx);
+  rebuildRouteList();
   renderLayersInterpolated(interpT);
 };
 
