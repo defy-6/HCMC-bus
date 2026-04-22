@@ -1014,7 +1014,6 @@ async function loadAndRender(){
       vehicleState.set(vehicleKey, {prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
     }
 
-    }
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
     updateFilterStatus();
