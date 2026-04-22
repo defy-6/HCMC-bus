@@ -530,12 +530,6 @@ const overlay = new MapboxOverlay({layers: []});
 map.addControl(overlay);
 map.addControl(new maplibregl.NavigationControl(), "bottom-right");
 
-// ================================================================
-// VEHICLE STATE  (TripId → {prevPos,currPos,heading,trail,routeId,routeVarId})
-// ================================================================
-const vehicleState = new Map();
-
-function clearVehicleState(){ vehicleState.clear(); }
 
 // ================================================================
 // VEHICLE STATE
