@@ -517,31 +517,25 @@
 const {IconLayer, ScatterplotLayer, PathLayer} = deck;
 const {MapboxOverlay} = deck;
 
-// ================================================================
-// MAP
-// ================================================================
+// ── MAP ──────────────────────────────────────────────────────────
 const map = new maplibregl.Map({
   container: "map",
   style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
   center: [106.7, 10.77],
   zoom: 11
 });
-const overlay = new MapboxOverlay({layers: []});
+const overlay = new MapboxOverlay({layers:[]});
 map.addControl(overlay);
 map.addControl(new maplibregl.NavigationControl(), "bottom-right");
 
-// ================================================================
-// CONFIG
-// ================================================================
+// ── CONFIG ───────────────────────────────────────────────────────
 const DATA_BASE        = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
 const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
 const ROUTE_META_URL   = "data/routes_meta.json";
 const BUS_ICON_URL     = "assets/bus.png";
-const ICON_MAPPING     = { bus:{x:0,y:0,width:64,height:64,anchorY:64} };
+const ICON_MAPPING     = {bus:{x:0,y:0,width:64,height:64,anchorY:64}};
 
-// ================================================================
-// HELPERS
-// ================================================================
+// ── HELPERS ──────────────────────────────────────────────────────
 function hhmm(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
 function parseHHMM(s){
   const m=/^(\d{1,2}):(\d{2})$/.exec((s||'').trim());
@@ -552,7 +546,7 @@ function parseHHMM(s){
 }
 function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
 function lerp(a,b,t){ return a+(b-a)*t; }
-function easeOut(t){ return 1-Math.pow(1-t,3); }
+function easeInOut(t){ return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
 
 function bearing(from,to){
   const[lng1,lat1]=from,[lng2,lat2]=to;
@@ -562,36 +556,25 @@ function bearing(from,to){
   const x=Math.cos(la1)*Math.sin(la2)-Math.sin(la1)*Math.cos(la2)*Math.cos(dL);
   return(Math.atan2(y,x)*180/Math.PI+360)%360;
 }
-
-function colorByRouteId(routeId){
-  const key=String(routeId); let h=0;
+function colorByRouteId(id){
+  const key=String(id); let h=0;
   for(let i=0;i<key.length;i++) h=(h*31+key.charCodeAt(i))|0;
-  const hue=(h>>>0)%360;
-  const sat=65+(((h>>>8)&0xff)%25);
-  const lit=38+(((h>>>16)&0xff)%18);
+  const hue=(h>>>0)%360,sat=65+(((h>>>8)&0xff)%25),lit=38+(((h>>>16)&0xff)%18);
   const s=sat/100,l=lit/100,a2=s*Math.min(l,1-l);
   const f=n=>{const k=(n+hue/30)%12;return l-a2*Math.max(-1,Math.min(k-3,9-k,1));};
   return[Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255),220];
 }
-
 function zoomToIconSize(b){ const z=map.getZoom(); return Math.max(4,b*Math.pow(2,(z-12)*0.7)); }
 function zoomToLineWidth(b){ const z=map.getZoom(); return Math.max(0.5,b*Math.pow(2,(z-12)*0.7)); }
 function zoomToPointR(b){ const z=map.getZoom(); return Math.max(1,b*Math.pow(2,(z-12)*0.35)); }
-function zoomLineAlpha(base){
-  const z=map.getZoom();
-  return Math.round(base*clamp((z-9)/4,0,1));
-}
-
-function rvKey(rid,rvid){
-  return String(rid)+':'+(rvid===undefined||rvid===null||rvid===''?'NA':String(rvid));
-}
+function zoomLineAlpha(base){ return Math.round(base*clamp((map.getZoom()-9)/4,0,1)); }
+function rvKey(rid,rvid){ return rid+':'+(rvid==null||rvid===''?'NA':String(rvid)); }
 
 function updateProgress(){
   const pct=(+minuteSlider.value/1439)*100;
   progressLine.style.width=pct+'%';
   timeDisplay.value=hhmm(+minuteSlider.value);
 }
-
 function updateLabels(){
   iconSizeLabel.textContent    = iconSizeSel.value;
   trailFramesLabel.textContent = trailFramesSel.value;
@@ -600,9 +583,7 @@ function updateLabels(){
   lineOpacityLabel.textContent = lineOpacitySel.value+'%';
 }
 
-// ================================================================
-// UI REFS
-// ================================================================
+// ── UI REFS ───────────────────────────────────────────────────────
 const daySel           = document.getElementById('day');
 const minuteSlider     = document.getElementById('minuteSlider');
 const timeDisplay      = document.getElementById('timeDisplay');
@@ -638,43 +619,32 @@ const displayToggle    = document.getElementById('displayToggle');
 const displayDrawer    = document.getElementById('displayDrawer');
 const interpBadge      = document.getElementById('interpBadge');
 
-// ================================================================
-// UI INTERACTIONS
-// ================================================================
+// ── UI INTERACTIONS ───────────────────────────────────────────────
 displayToggle.addEventListener('click',()=>{
   const open=displayDrawer.classList.toggle('open');
   displayToggle.classList.toggle('active',open);
 });
-
 filterBtn.addEventListener('click',()=>{ filterModal.classList.add('open'); filterBtn.classList.add('active'); });
 function closeModal(){ filterModal.classList.remove('open'); filterBtn.classList.remove('active'); }
 modalBackdrop.addEventListener('click',closeModal);
 modalClose.addEventListener('click',closeModal);
-
 timeDisplay.addEventListener('keydown',e=>{
   if(e.key==='Enter'){
     e.preventDefault();
     const v=parseHHMM(timeDisplay.value);
     if(v===null){ timeDisplay.classList.add('error'); return; }
-    timeDisplay.classList.remove('error');
-    timeDisplay.blur();
+    timeDisplay.classList.remove('error'); timeDisplay.blur();
     stopPlay(); clearVehicleState();
     minuteSlider.value=clamp(v,0,1439);
-    updateProgress();
-    loadAndRender();
+    updateProgress(); loadAndRender();
   }
   if(e.key==='Escape'){ timeDisplay.blur(); timeDisplay.classList.remove('error'); }
 });
 timeDisplay.addEventListener('input',()=>timeDisplay.classList.remove('error'));
 timeDisplay.addEventListener('blur',()=>{ timeDisplay.value=hhmm(+minuteSlider.value); timeDisplay.classList.remove('error'); });
 
-// ================================================================
-// FILTER STATE
-// ================================================================
-let filterMode   = 'all';
-let selectedKeys = new Set();
-let totalRouteVarCount = 0;
-
+// ── FILTER STATE ─────────────────────────────────────────────────
+let filterMode='all', selectedKeys=new Set(), totalRouteVarCount=0;
 function setFilterMode(mode){
   filterMode=mode;
   if(mode!=='custom') selectedKeys=new Set();
@@ -687,19 +657,13 @@ function keyAllowed(rid,rvid){
 }
 function updateFilterStatus(){
   const sel=filterMode==='all'?totalRouteVarCount:filterMode==='none'?0:selectedKeys.size;
-  if(filterMode==='all')       statFilter.textContent='all';
-  else if(filterMode==='none') statFilter.textContent='none';
-  else                         statFilter.textContent=selectedKeys.size+' vars';
+  statFilter.textContent=filterMode==='all'?'all':filterMode==='none'?'none':selectedKeys.size+' vars';
   selCount.innerHTML='<b>'+sel+'</b> / '+totalRouteVarCount+' selected';
 }
 
-// ================================================================
-// DATA LAYER
-// ================================================================
-let routeMeta   = null;
-let routeLines  = null;
-let cachedLines = null;
-const dayIndexCache = new Map();
+// ── DATA LAYER ────────────────────────────────────────────────────
+let routeMeta=null, routeLines=null, cachedLines=null;
+const dayIndexCache=new Map();
 
 async function fetchJson(u){
   const r=await fetch(u);
@@ -731,7 +695,7 @@ async function getDayIndex(day){
   if(dayIndexCache.has(day)) return dayIndexCache.get(day);
   statTime.textContent='Indexing…';
   const r=await fetch(DATA_BASE+'/'+day+'.csv');
-  if(!r.ok) throw new Error('Fetch failed: '+day+'.csv');
+  if(!r.ok) throw new Error('Fetch failed '+day+'.csv');
   const text=await r.text();
   const lines=text.trim().split('\n');
   if(lines.length<=1){
@@ -752,11 +716,11 @@ async function getDayIndex(day){
     const c=lines[i].split(',');
     const min=+c[iMin]; if(!Number.isFinite(min)) continue;
     const rid=String(c[iR]??'').trim(); if(!rid) continue;
-    const rvid =(iV >=0&&c[iV ]?.trim())?String(c[iV ].trim()):'NA';
+    const rvid=(iV>=0&&c[iV]?.trim())?String(c[iV].trim()):'NA';
     const lng=+c[iLng],lat=+c[iLat];
     if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
     const ttid  =(iTT>=0&&c[iTT]?.trim())?String(c[iTT].trim()):'NA';
-    const tripId=(iT >=0&&c[iT ]?.trim())?String(c[iT ].trim()):'NA';
+    const tripId=(iT>=0&&c[iT]?.trim())?String(c[iT].trim()):'NA';
     if(!minuteMap.has(min)) minuteMap.set(min,[]);
     minuteMap.get(min).push({lng,lat,routeId:rid,routeVarId:rvid,timeTableId:ttid,tripId});
     if(!byRouteId.has(rid)) byRouteId.set(rid,new Set());
@@ -772,90 +736,42 @@ function getMinuteFrame(dayIndex,minute){
   const result=new Map();
   for(const d of rows){
     if(!keyAllowed(d.routeId,d.routeVarId)) continue;
-    const vehicleKey=d.routeId+'|'+d.routeVarId+'|'+d.timeTableId+'|'+d.tripId;
-    result.set(vehicleKey,d);
+    result.set(d.routeId+'|'+d.routeVarId+'|'+d.timeTableId+'|'+d.tripId, d);
   }
   return result;
 }
 
-// ================================================================
-// VEHICLE STATE
-// ================================================================
+// ── VEHICLE STATE ─────────────────────────────────────────────────
 const vehicleState=new Map();
 function clearVehicleState(){ vehicleState.clear(); }
 
 function updateVehicleState(newFrame){
   const active=new Set(newFrame.keys());
-  for(const[vehicleKey,data] of newFrame){
-    if(vehicleState.has(vehicleKey)){
-      const vs=vehicleState.get(vehicleKey);
+  for(const[key,data] of newFrame){
+    if(vehicleState.has(key)){
+      const vs=vehicleState.get(key);
       const prev=vs.currPos,curr=[data.lng,data.lat];
       const moved=Math.abs(curr[0]-prev[0])>0.000005||Math.abs(curr[1]-prev[1])>0.000005;
       vs.prevPos=prev; vs.currPos=curr;
       if(moved) vs.heading=bearing(prev,curr);
-      if(vs.smoothTrail.length===0) vs.smoothTrail.push([...prev]);
     } else {
-      vehicleState.set(vehicleKey,{
+      vehicleState.set(key,{
         prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],
         heading:0,smoothTrail:[],
         routeId:data.routeId,routeVarId:data.routeVarId
       });
     }
   }
-  for(const key of vehicleState.keys()) if(!active.has(key)) vehicleState.delete(key);
+  for(const k of vehicleState.keys()) if(!active.has(k)) vehicleState.delete(k);
 }
 
-// ================================================================
-// RAF PLAYBACK ENGINE
-// ================================================================
-let rafId       = null;
-let playing     = false;
-let globalT     = 1;
-let minuteWall  = 0;
-let tickDuration= 1000;
-let loadTimer   = null;
-
-function easeOutFn(t){ return 1-Math.pow(1-t,3); }
-
-function rafLoop(now){
-  if(!playing){ rafId=null; return; }
-  rafId=requestAnimationFrame(rafLoop);
-  const raw=Math.min((now-minuteWall)/tickDuration,1);
-  globalT=easeOutFn(raw);
-  // Append interpolated position to smoothTrail every frame
-  for(const vs of vehicleState.values()){
-    const lng=lerp(vs.prevPos[0],vs.currPos[0],globalT);
-    const lat=lerp(vs.prevPos[1],vs.currPos[1],globalT);
-    const last=vs.smoothTrail[vs.smoothTrail.length-1];
-    if(!last||Math.abs(lng-last[0])>0.000005||Math.abs(lat-last[1])>0.000005){
-      vs.smoothTrail.push([lng,lat]);
-    }
-    if(vs.smoothTrail.length>40) vs.smoothTrail.shift();
-  }
-  renderFrame(globalT);
-}
-
-function startRafLoop(){
-  if(rafId) return;
-  interpBadge.classList.add('show');
-  rafId=requestAnimationFrame(rafLoop);
-}
-function stopRafLoop(){
-  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
-  interpBadge.classList.remove('show');
-  globalT=1;
-}
-
-// ================================================================
-// RENDER FRAME
-// ================================================================
+// ── RENDER ────────────────────────────────────────────────────────
 function renderFrame(t){
   const layers=[];
   const baseAlpha=Math.round(255*clamp(+lineOpacitySel.value,0,100)/100);
   const lineAlpha=zoomLineAlpha(baseAlpha);
   const iconPx=zoomToIconSize(+iconSizeSel.value);
 
-  // Route lines
   if(showLinesChk.checked&&cachedLines&&cachedLines.length){
     const fl=cachedLines.filter(l=>keyAllowed(l.RouteId,l.RouteVarId));
     layers.push(new PathLayer({
@@ -874,7 +790,6 @@ function renderFrame(t){
     }));
   }
 
-  // Smooth comet tails
   if(showTrailChk.checked){
     const tailData=[];
     for(const vs of vehicleState.values()){
@@ -900,7 +815,6 @@ function renderFrame(t){
     }
   }
 
-  // Vehicle icons / scatter
   const pts=[];
   for(const vs of vehicleState.values()){
     pts.push({
@@ -933,41 +847,105 @@ function renderFrame(t){
   overlay.setProps({layers});
 }
 
-// ================================================================
-// PLAYBACK CONTROL
-// ================================================================
+// ── PLAYBACK ENGINE ───────────────────────────────────────────────
+// Single RAF loop drives everything.
+// No setInterval — time is tracked purely via performance.now().
+// Pre-fetch NEXT minute's data while current minute is still playing,
+// so data is ready exactly when needed (zero wait at minute boundary).
+
+let playing      = false;
+let rafId        = null;
+let playStartWall= 0;   // performance.now() when play began (or last scrub)
+let playStartMin = 0;   // integer minute when play began
+let tickMs       = 1000;// ms per simulated minute
+let nextFrame    = null;// pre-fetched Map for next minute
+let nextMinute   = -1;  // which minute nextFrame covers
+let currentMinute= 0;
+
+async function prefetchNext(minute){
+  const m=(minute+1)%1440;
+  try{
+    const dayIdx=await getDayIndex(daySel.value);
+    nextFrame=getMinuteFrame(dayIdx,m);
+    nextMinute=m;
+  }catch(e){ console.warn('prefetch failed',e); }
+}
+
+function rafLoop(now){
+  if(!playing){ rafId=null; return; }
+  rafId=requestAnimationFrame(rafLoop);
+
+  // How many ms have elapsed since playback started?
+  const elapsed=now-playStartWall;
+  // Which minute are we in, and how far through it (0→1)?
+  const totalMinutes=elapsed/tickMs;
+  const minuteIndex=Math.floor(totalMinutes);
+  const rawT=totalMinutes-minuteIndex;        // 0→1 within this minute
+  const t=easeInOut(rawT);
+
+  const targetMinute=(playStartMin+minuteIndex)%1440;
+
+  // Minute boundary crossed → swap in pre-fetched data
+  if(targetMinute!==currentMinute){
+    if(nextMinute===targetMinute&&nextFrame!==null){
+      // Data already ready — seamless swap, no stutter
+      updateVehicleState(nextFrame);
+      nextFrame=null; nextMinute=-1;
+    } else {
+      // Data not ready yet (slow connection) — load synchronously
+      getDayIndex(daySel.value).then(idx=>{
+        updateVehicleState(getMinuteFrame(idx,targetMinute));
+      });
+    }
+    currentMinute=targetMinute;
+    minuteSlider.value=targetMinute;
+    updateProgress();
+    statTime.textContent=hhmm(targetMinute);
+
+    // Start pre-fetching the minute after this one
+    prefetchNext(targetMinute);
+  }
+
+  // Append current interpolated pos to smooth trail every frame
+  for(const vs of vehicleState.values()){
+    const lng=lerp(vs.prevPos[0],vs.currPos[0],t);
+    const lat=lerp(vs.prevPos[1],vs.currPos[1],t);
+    const last=vs.smoothTrail[vs.smoothTrail.length-1];
+    if(!last||Math.abs(lng-last[0])>0.000004||Math.abs(lat-last[1])>0.000004){
+      vs.smoothTrail.push([lng,lat]);
+    }
+    if(vs.smoothTrail.length>35) vs.smoothTrail.shift();
+  }
+
+  renderFrame(t);
+}
+
 function stopPlay(){
-  clearInterval(loadTimer); loadTimer=null;
-  stopRafLoop(); playing=false;
+  playing=false;
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  interpBadge.classList.remove('show');
+  nextFrame=null; nextMinute=-1;
   btnPlayToggle.innerHTML='▶'; btnPlayToggle.classList.remove('playing');
 }
 
 async function startPlay(){
-  stopPlay(); playing=true;
+  stopPlay();
+  // Anchor wall-clock time to NOW, so elapsed=0 → t=0 → smooth start
+  playStartWall=performance.now();
+  playStartMin=+minuteSlider.value;
+  currentMinute=playStartMin;
+  tickMs=1000/+speedSel.value;
+  playing=true;
   btnPlayToggle.innerHTML='⏸'; btnPlayToggle.classList.add('playing');
-  tickDuration=1000/+speedSel.value;
-  async function tick(){
-    minuteWall=performance.now();
-    minuteSlider.value=(+minuteSlider.value+1)%1440;
-    updateProgress();
-    try{
-      const dayIdx=await getDayIndex(daySel.value);
-      const newFrame=getMinuteFrame(dayIdx,+minuteSlider.value);
-      updateVehicleState(newFrame);
-      statTime.textContent=hhmm(+minuteSlider.value);
-      statVehicles.textContent=vehicleState.size;
-    }catch(e){ console.error(e); }
-  }
-  await tick();
-  startRafLoop();
-  loadTimer=setInterval(tick,tickDuration);
+  interpBadge.classList.add('show');
+  // Pre-fetch the very next minute immediately
+  prefetchNext(currentMinute);
+  rafId=requestAnimationFrame(rafLoop);
 }
 
 btnPlayToggle.addEventListener('click',()=>{ if(playing) stopPlay(); else startPlay(); });
 
-// ================================================================
-// ADVANCE MINUTE (scrubbing)
-// ================================================================
+// ── SCRUBBING ─────────────────────────────────────────────────────
 async function advanceMinute(minute){
   updateProgress(); updateLabels();
   try{
@@ -975,9 +953,10 @@ async function advanceMinute(minute){
     const newFrame=getMinuteFrame(dayIdx,minute);
     for(const vs of vehicleState.values()) vs.smoothTrail=[];
     updateVehicleState(newFrame);
+    currentMinute=minute;
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
-    globalT=1; renderFrame(1);
+    renderFrame(1);
   }catch(e){
     console.error(e);
     statTime.textContent='Error'; statVehicles.textContent=e.message;
@@ -985,9 +964,7 @@ async function advanceMinute(minute){
   }
 }
 
-// ================================================================
-// INITIAL LOAD
-// ================================================================
+// ── INITIAL LOAD ──────────────────────────────────────────────────
 async function loadAndRender(){
   const day=daySel.value,minute=+minuteSlider.value;
   updateProgress(); updateLabels();
@@ -997,13 +974,13 @@ async function loadAndRender(){
     if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(dayIdx); }
     const newFrame=getMinuteFrame(dayIdx,minute);
     clearVehicleState();
-    for(const[vehicleKey,data] of newFrame){
-      vehicleState.set(vehicleKey,{
+    for(const[k,data] of newFrame){
+      vehicleState.set(k,{
         prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],
-        heading:0,smoothTrail:[],
-        routeId:data.routeId,routeVarId:data.routeVarId
+        heading:0,smoothTrail:[],routeId:data.routeId,routeVarId:data.routeVarId
       });
     }
+    currentMinute=minute;
     statTime.textContent=hhmm(minute);
     statVehicles.textContent=vehicleState.size;
     updateFilterStatus();
@@ -1015,11 +992,8 @@ async function loadAndRender(){
   }
 }
 
-// ================================================================
-// ROUTE LIST UI
-// ================================================================
-let currentSearch='';
-let lastDayIndex=null;
+// ── ROUTE LIST UI ─────────────────────────────────────────────────
+let currentSearch='', lastDayIndex=null;
 
 routeSearch.addEventListener('input',()=>{ currentSearch=routeSearch.value.trim().toLowerCase(); rebuildRouteList(); });
 
@@ -1048,12 +1022,11 @@ function rebuildRouteList(){
       .sort((a,b)=>String(a).localeCompare(String(b),'en',{numeric:true}));
     const allVarKeys=vars.map(v=>rvKey(rid,v));
     const col=colorByRouteId(rid);
-    const colorStr='rgba('+col[0]+','+col[1]+','+col[2]+',0.85)';
+    const cs='rgba('+col[0]+','+col[1]+','+col[2]+',0.85)';
     const block=document.createElement('div'); block.className='routeBlock';
     const topRow=document.createElement('div'); topRow.className='route-row-top';
     const chip=document.createElement('span'); chip.className='chip';
-    chip.style.borderLeft='4px solid '+colorStr;
-    chip.textContent='Route '+routeNo;
+    chip.style.borderLeft='4px solid '+cs; chip.textContent='Route '+routeNo;
     const name=document.createElement('span'); name.className='route-name'; name.textContent=routeName;
     const allSel=allVarKeys.every(k=>selectedKeys.has(k)||(filterMode==='all'));
     const toggleBtn=document.createElement('button');
@@ -1067,17 +1040,16 @@ function rebuildRouteList(){
       if(selectedKeys.size===0) setFilterMode('none');
       else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode('all');
       else updateFilterStatus();
-      rebuildRouteList(); renderFrame(globalT);
+      rebuildRouteList(); renderFrame(1);
     };
     topRow.appendChild(chip); topRow.appendChild(name); topRow.appendChild(toggleBtn);
     block.appendChild(topRow);
     const varsRow=document.createElement('div'); varsRow.className='route-vars';
     for(const v of vars){
       const k=rvKey(rid,v);
-      const allowed=keyAllowed(rid,v);
       const vc=document.createElement('div');
-      vc.className='var-chip'+(allowed?' selected':'');
-      const dot=document.createElement('span'); dot.className='var-chip-dot'; dot.style.background=colorStr;
+      vc.className='var-chip'+(keyAllowed(rid,v)?' selected':'');
+      const dot=document.createElement('span'); dot.className='var-chip-dot'; dot.style.background=cs;
       vc.appendChild(dot); vc.appendChild(document.createTextNode('Var '+v));
       vc.onclick=()=>{
         if(filterMode!=='custom'){ filterMode='custom'; selectedKeys=new Set(dayIndex.allKeys); }
@@ -1085,7 +1057,7 @@ function rebuildRouteList(){
         if(selectedKeys.size===0) setFilterMode('none');
         else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode('all');
         else updateFilterStatus();
-        rebuildRouteList(); renderFrame(globalT);
+        rebuildRouteList(); renderFrame(1);
       };
       varsRow.appendChild(vc);
     }
@@ -1095,26 +1067,24 @@ function rebuildRouteList(){
   updateFilterStatus();
 }
 
-// ================================================================
-// EVENTS
-// ================================================================
+// ── EVENTS ────────────────────────────────────────────────────────
 daySel.onchange=async()=>{ stopPlay(); clearVehicleState(); cachedLines=null; await loadAndRender(); };
 minuteSlider.oninput=async()=>{ stopPlay(); await advanceMinute(+minuteSlider.value); };
-speedSel.onchange=()=>{ tickDuration=1000/+speedSel.value; if(playing) startPlay(); };
+speedSel.onchange=()=>{ if(playing){ stopPlay(); startPlay(); } };
 
-showIconChk.onchange   =()=>{ renderFrame(globalT); };
-showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.smoothTrail=[]; renderFrame(globalT); };
-trailFramesSel.oninput =()=>{ renderFrame(globalT); };
-iconSizeSel.oninput    =()=>{ updateLabels(); renderFrame(globalT); };
-pointSizeSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
-showLinesChk.onchange  =()=>{ renderFrame(globalT); };
-lineWidthSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
-lineOpacitySel.oninput =()=>{ updateLabels(); renderFrame(globalT); };
+showIconChk.onchange   =()=>renderFrame(1);
+showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.smoothTrail=[]; renderFrame(1); };
+trailFramesSel.oninput =()=>renderFrame(1);
+iconSizeSel.oninput    =()=>{ updateLabels(); renderFrame(1); };
+pointSizeSel.oninput   =()=>{ updateLabels(); renderFrame(1); };
+showLinesChk.onchange  =()=>renderFrame(1);
+lineWidthSel.oninput   =()=>{ updateLabels(); renderFrame(1); };
+lineOpacitySel.oninput =()=>{ updateLabels(); renderFrame(1); };
 
-btnAll.onclick =()=>{ setFilterMode('all');  rebuildRouteList(); renderFrame(globalT); };
-btnNone.onclick=()=>{ setFilterMode('none'); rebuildRouteList(); renderFrame(globalT); };
+btnAll.onclick =()=>{ setFilterMode('all');  rebuildRouteList(); renderFrame(1); };
+btnNone.onclick=()=>{ setFilterMode('none'); rebuildRouteList(); renderFrame(1); };
 
-map.on('zoom',()=>{ renderFrame(globalT); });
+map.on('zoom',()=>renderFrame(playing?undefined:1));
 map.on('load',async()=>{ setFilterMode('all'); await loadAndRender(); });
 </script>
 </body>
