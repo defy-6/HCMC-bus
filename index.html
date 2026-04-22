@@ -7,317 +7,509 @@
 
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"/>
-
   <script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
   <script src="https://unpkg.com/@deck.gl/mapbox@8.9.36/dist.min.js"></script>
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    #map { position: absolute; inset: 0; }
-
+    /* =============================================
+       DESIGN TOKENS
+    ============================================= */
     :root {
-      --bg:         rgba(255,255,255,0.97);
-      --bg-surface: #f5f5f5;
-      --bg-input:   #fff;
-      --border:     #ddd;
-      --text:       #1a1a1a;
-      --text-muted: #666;
-      --text-hint:  #999;
-      --accent:     #2563eb;
-      --accent-bg:  #eff6ff;
-      --danger:     #dc2626;
-      --danger-bg:  #fef2f2;
-      --radius-sm:  6px;
-      --radius-md:  9px;
-      --radius-lg:  12px;
-      --shadow:     0 4px 24px rgba(0,0,0,.13), 0 1px 4px rgba(0,0,0,.08);
+      --bg: #0f1115;
+      --glass: rgba(15,17,21,0.84);
+      --glass-light: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --text: #f3f5f7;
+      --muted: #9aa3b0;
+      --accent: #8db7ff;
+      --accent-2: #c9dcff;
+      --accent-bg: rgba(141,183,255,0.10);
+      --accent-border: rgba(141,183,255,0.28);
+      --danger: #f87171;
+      --danger-bg: rgba(248,113,113,0.10);
+      --green: #86efac;
+      --green-bg: rgba(134,239,172,0.10);
+      --green-border: rgba(134,239,172,0.22);
+      --playbar-h: 88px;
+      --sidebar-w: 320px;
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg:         rgba(28,28,30,0.97);
-        --bg-surface: #2c2c2e;
-        --bg-input:   #3a3a3c;
-        --border:     #48484a;
-        --text:       #f0f0f0;
-        --text-muted: #aaa;
-        --text-hint:  #777;
-        --accent:     #60a5fa;
-        --accent-bg:  #1e3a5f;
-        --danger:     #f87171;
-        --danger-bg:  #3b1212;
-      }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden;
+      font-family: "DM Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background: var(--bg); color: var(--text);
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* ---- Panel ---- */
-    .panel {
+    /* =============================================
+       MAP (full-screen minus playbar)
+    ============================================= */
+    #map {
       position: absolute;
-      top: 12px; left: 12px;
-      background: var(--bg);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow);
-      z-index: 10;
-      user-select: none;
-      width: 320px;
-      max-height: calc(100vh - 24px);
-      overflow-y: auto;
-      overflow-x: hidden;
-      scrollbar-width: thin;
-      color: var(--text);
+      inset: 0 0 var(--playbar-h) 0;
+    }
+
+    /* =============================================
+       SETTINGS PANEL (top-left float)
+    ============================================= */
+    #settingsPanel {
+      position: absolute;
+      top: 14px; left: 14px;
+      z-index: 20;
+      width: var(--sidebar-w);
+      backdrop-filter: blur(18px);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
       font-size: 13px;
-      transition: width .25s ease, max-height .25s ease;
-    }
-    .panel.collapsed { width: 44px; max-height: 44px; overflow: hidden; }
-    .panel.collapsed .panel-body { display: none; }
-
-    @media (max-width: 600px) {
-      .panel {
-        top: auto; left: 0; right: 0; bottom: 0;
-        width: 100%;
-        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        max-height: 60vh;
-      }
-      .panel.collapsed { max-height: 48px; }
+      user-select: none;
+      overflow: hidden;
     }
 
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px 8px;
+    /* Panel header */
+    .sp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 10px;
       border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      background: var(--bg);
-      z-index: 1;
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      background: rgba(15,17,21,0.6);
     }
-    .panel-header-title { font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .btn-collapse { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: var(--radius-sm); flex-shrink: 0; }
-    .btn-collapse:hover { background: var(--bg-surface); }
+    .sp-brand { display: flex; flex-direction: column; gap: 2px; }
+    .sp-title { font-size: 0.86rem; font-weight: 700; letter-spacing: -0.01em; }
+    .sp-sub   { font-size: 0.65rem; color: var(--muted); }
+    .hero-tag {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: var(--accent-bg); border: 1px solid var(--accent-border);
+      color: var(--accent-2); font-size: 0.58rem; font-weight: 800;
+      letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .sp-actions { display: flex; gap: 6px; align-items: center; }
 
-    .panel-body { padding: 10px 12px 12px; }
+    /* Icon button */
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--glass-light);
+      color: var(--muted); cursor: pointer; font-size: 14px;
+      transition: background 0.13s, color 0.13s;
+      flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+    .icon-btn.active { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
 
-    .section { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-    .section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    /* Collapsible display drawer */
+    .sp-drawer {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    .sp-drawer.open { max-height: 600px; }
+    .sp-drawer-inner { padding: 12px 16px 14px; border-top: 1px solid var(--border); }
 
-    .section-label { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-hint); margin-bottom: 7px; }
+    /* Status bar */
+    .sp-stat {
+      display: flex; gap: 12px; padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .stat-item { display: flex; gap: 4px; align-items: baseline; font-size: 0.67rem; color: var(--muted); }
+    .stat-val  { font-weight: 700; color: var(--accent-2); }
 
-    .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-    .row:last-child { margin-bottom: 0; }
+    /* Interp badge */
+    .interp-badge {
+      display: none; align-items: center; gap: 5px; padding: 3px 9px;
+      border-radius: 999px; background: var(--green-bg); border: 1px solid var(--green-border);
+      color: var(--green); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .interp-badge.show { display: inline-flex; }
+    .interp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
 
-    .lbl { font-size: 12px; color: var(--text-muted); min-width: 72px; }
-    .val { font-size: 12px; font-weight: 500; min-width: 28px; text-align: right; color: var(--text); }
-    .hint { font-size: 11px; color: var(--text-hint); }
+    /* =============================================
+       FORM ELEMENTS
+    ============================================= */
+    .kicker {
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--accent-2); margin-bottom: 9px;
+    }
+    .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .form-row:last-child { margin-bottom: 0; }
+    .lbl { font-size: 0.72rem; color: var(--muted); min-width: 80px; }
+    .val { font-size: 0.72rem; font-weight: 600; min-width: 26px; text-align: right; color: var(--text); }
+    .hint { font-size: 0.65rem; color: var(--muted); }
 
-    input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); cursor: pointer; }
+    input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); cursor: pointer; height: 3px; }
 
     select {
-      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text); font-size: 12px; padding: 3px 6px; cursor: pointer;
+      background: var(--glass-light); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.73rem;
+      padding: 4px 8px; cursor: pointer; font-family: inherit;
     }
-    select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    select:focus { outline: none; border-color: var(--accent-border); }
+    select option { background: #1a1f2e; }
 
-    button {
-      cursor: pointer; border: 1px solid var(--border); background: var(--bg-input);
-      color: var(--text); border-radius: var(--radius-sm); font-size: 12px;
-      padding: 4px 10px; line-height: 1.4; transition: background .12s;
+    .check-row {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+      font-size: 0.75rem; color: var(--muted); cursor: pointer;
     }
-    button:hover { background: var(--bg-surface); }
-    button:disabled { opacity: .4; cursor: not-allowed; }
-
-    #playToggle { font-size: 13px; padding: 5px 14px; border-color: var(--accent); color: var(--accent); font-weight: 500; }
-    #playToggle.playing { background: var(--accent-bg); }
-
-    .time-display { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); min-width: 52px; text-align: center; }
-
-    .tick-track { position: relative; height: 14px; margin: 2px 0 4px; display: flex; align-items: center; }
-    .tick-track span { position: absolute; font-size: 10px; color: var(--text-hint); transform: translateX(-50%); }
-
-    .jump-row { display: flex; align-items: center; gap: 5px; }
-    .timeInput {
-      width: 62px; padding: 3px 7px; border: 1px solid var(--border);
-      border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
-      background: var(--bg-input); color: var(--text); transition: border-color .15s;
-    }
-    .timeInput:focus { outline: none; border-color: var(--accent); }
-    .timeInput.error { border-color: var(--danger); background: var(--danger-bg); }
-
-    .error-hint { font-size: 11px; color: var(--danger); display: none; }
-    .error-hint.visible { display: block; }
-
-    .check-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; color: var(--text); }
+    .check-row:last-child { margin-bottom: 0; }
     .check-row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
 
-    .routes {
-      border: 1px solid var(--border); border-radius: var(--radius-md);
-      max-height: 220px; overflow-y: auto; overflow-x: hidden;
-      background: var(--bg-input); scrollbar-width: thin;
-    }
-    .route-search {
-      width: 100%; padding: 5px 9px; border: none;
-      border-bottom: 1px solid var(--border);
-      border-radius: var(--radius-md) var(--radius-md) 0 0;
-      font-size: 12px; font-family: inherit;
-      background: var(--bg-surface); color: var(--text);
-    }
-    .route-search:focus { outline: none; background: var(--bg-input); }
-    .route-search::placeholder { color: var(--text-hint); }
+    .divider { height: 1px; background: var(--border); margin: 10px 0; }
 
-    .routeBlock { padding: 6px 8px 8px; border-bottom: 1px solid var(--border); }
+    /* =============================================
+       FIXED BOTTOM PLAYBAR
+    ============================================= */
+    #playbar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: var(--playbar-h);
+      z-index: 30;
+      backdrop-filter: blur(20px);
+      background: rgba(10,12,17,0.92);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    /* Play/pause button */
+    #playToggle {
+      display: flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid var(--accent-border);
+      background: var(--accent-bg); color: var(--accent-2);
+      font-size: 16px; cursor: pointer; flex-shrink: 0;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #playToggle:hover { background: rgba(141,183,255,0.18); transform: scale(1.06); }
+    #playToggle.playing { background: rgba(141,183,255,0.16); border-color: var(--accent); }
+
+    /* Day + speed selectors */
+    .pb-select-group { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .pb-select-group select { font-size: 0.72rem; padding: 4px 7px; }
+
+    /* Time display — click to edit */
+    .pb-time-block { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; cursor: pointer; }
+    #timeDisplay {
+      font-size: 1.55rem; font-weight: 800; font-variant-numeric: tabular-nums;
+      color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
+      border: none; background: transparent; text-align: center;
+      width: 92px; cursor: pointer; caret-color: var(--accent-2);
+      font-family: inherit;
+    }
+    #timeDisplay:focus { outline: 2px solid var(--accent-border); border-radius: 6px; }
+    #timeDisplay.error { color: var(--danger); }
+    .pb-time-hint { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    /* Scrubber column (takes remaining space) */
+    .pb-scrubber { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+    /* Timeline gradient track */
+    .pb-track-wrap { position: relative; height: 28px; display: flex; align-items: center; }
+    .pb-gradient-track {
+      position: absolute; left: 0; right: 0; height: 6px; border-radius: 3px;
+      background: linear-gradient(to right,
+        #1a2a4a 0%,       /* 00:00 midnight */
+        #1e3a6e 15%,      /* 04:00 pre-dawn */
+        #f59e0b 25%,      /* 06:00 sunrise */
+        #fde68a 35%,      /* 08:00 morning */
+        #e0f2fe 50%,      /* 12:00 noon */
+        #fde68a 65%,      /* 16:00 afternoon */
+        #f97316 75%,      /* 18:00 sunset */
+        #312e81 87%,      /* 21:00 dusk */
+        #1a2a4a 100%      /* 24:00 midnight */
+      );
+      pointer-events: none;
+    }
+    .pb-progress-line {
+      position: absolute; top: 0; left: 0; height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.35); pointer-events: none;
+      transition: width 0.05s linear;
+    }
+    #minuteSlider {
+      position: relative; z-index: 1; width: 100%;
+      appearance: none; -webkit-appearance: none;
+      background: transparent; cursor: pointer; height: 28px;
+    }
+    #minuteSlider::-webkit-slider-thumb {
+      appearance: none; -webkit-appearance: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    #minuteSlider::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;
+    }
+
+    /* Tick labels */
+    .pb-ticks { display: flex; justify-content: space-between; padding: 0 2px; }
+    .pb-ticks span { font-size: 0.58rem; color: var(--muted); }
+
+    /* =============================================
+       ROUTE FILTER MODAL
+    ============================================= */
+    #filterModal {
+      position: absolute;
+      inset: 0 0 var(--playbar-h) 0;
+      z-index: 40;
+      display: none;
+      align-items: stretch;
+      justify-content: flex-end;
+    }
+    #filterModal.open { display: flex; }
+
+    .modal-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(3px);
+      cursor: pointer;
+    }
+    .modal-drawer {
+      position: relative; z-index: 1;
+      width: 400px; max-width: 92vw;
+      display: flex; flex-direction: column;
+      background: rgba(14,16,22,0.97);
+      border-left: 1px solid var(--border);
+      box-shadow: -20px 0 60px rgba(0,0,0,0.5);
+      animation: slideIn 0.22s cubic-bezier(0.4,0,0.2,1);
+    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 14px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 0.9rem; font-weight: 700; }
+    .modal-sub   { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+    .modal-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .modal-toolbar input[type=search] {
+      flex: 1; min-width: 120px; padding: 7px 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--glass-light); color: var(--text);
+      font-size: 0.78rem; font-family: inherit;
+    }
+    .modal-toolbar input[type=search]:focus { outline: none; border-color: var(--accent-border); }
+    .modal-toolbar input[type=search]::placeholder { color: var(--muted); }
+
+    .sel-count {
+      font-size: 0.7rem; color: var(--muted); white-space: nowrap;
+    }
+    .sel-count b { color: var(--accent-2); }
+
+    .sm-btn {
+      padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--glass-light); color: var(--muted); font-size: 0.72rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: background 0.12s, color 0.12s;
+    }
+    .sm-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+
+    .modal-body {
+      flex: 1; overflow-y: auto; scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
+    }
+    .modal-body::-webkit-scrollbar { width: 4px; }
+    .modal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+    .routeBlock {
+      padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.12s;
+    }
+    .routeBlock:hover { background: rgba(255,255,255,0.03); }
     .routeBlock:last-child { border-bottom: none; }
 
-    .routeHead { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: start; }
-    .routeHead .btnCol { display: flex; align-items: center; }
-    .routeHead button { width: 80px; height: 24px; padding: 0; font-size: 11px; }
-    .routeHead .infoCol .titleRow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-    .routeHead .infoCol .descRow { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
-    .routeHead .infoCol .varsRow { margin-top: 2px; font-size: 11px; color: var(--text-hint); }
-
-    .routeVarRow { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; padding: 2px 0; }
-    .routeVarRow .cbCol { display: flex; align-items: center; padding-left: 6px; }
-    .routeVarRow input[type="checkbox"] { accent-color: var(--accent); }
-
+    .route-row-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
     .chip {
-      display: inline-flex; align-items: center; padding: 2px 8px;
-      border-radius: 999px; background: var(--bg-surface);
-      font-size: 11px; font-weight: 500; white-space: nowrap; color: var(--text);
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+      background: rgba(255,255,255,0.07); border: 1px solid var(--border);
+      font-size: 0.7rem; font-weight: 700; white-space: nowrap; color: var(--text);
     }
+    .route-name { font-size: 0.75rem; color: var(--muted); flex: 1; }
+    .route-toggle-btn {
+      padding: 4px 12px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--glass-light); color: var(--muted);
+      font-size: 0.68rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      transition: background 0.12s, color 0.12s;
+      flex-shrink: 0;
+    }
+    .route-toggle-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+    .route-toggle-btn.selected { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
 
-    .stat-bar { margin-top: 2px; font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; flex-wrap: wrap; }
-    .stat-item { display: flex; gap: 3px; align-items: baseline; }
-    .stat-val { font-weight: 600; color: var(--text); }
+    .route-vars { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .var-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 7px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      font-size: 0.65rem; color: var(--muted); cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .var-chip.selected { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent-2); }
+    .var-chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    @media (max-width: 600px) {
+      #playbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px; }
+      :root { --playbar-h: 130px; }
+      .modal-drawer { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+      #filterModal { justify-content: flex-start; align-items: flex-end; }
+      @keyframes slideIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    }
   </style>
 </head>
-
 <body>
+
+<!-- MAP -->
 <div id="map"></div>
 
-<div class="panel" id="panel">
-  <div class="panel-header">
-    <span class="panel-header-title">Bus Weekly Playback</span>
-    <button class="btn-collapse" id="collapseBtn" title="Collapse panel">&#x25B4;</button>
+<!-- =============================================
+     SETTINGS PANEL (top-left)
+============================================= -->
+<div id="settingsPanel">
+  <div class="sp-header">
+    <div class="sp-brand">
+      <div class="hero-tag">Live Simulation</div>
+      <div class="sp-title">Bus Weekly Playback</div>
+      <div class="sp-sub">Ho Chi Minh City · GTFS · TripId tracking</div>
+    </div>
+    <div class="sp-actions">
+      <div class="interp-badge" id="interpBadge"><span class="interp-dot"></span>Live</div>
+      <!-- Filter routes button -->
+      <button class="icon-btn" id="filterBtn" title="Filter routes">⊞</button>
+      <!-- Display settings toggle -->
+      <button class="icon-btn" id="displayToggle" title="Display settings">⚙</button>
+    </div>
   </div>
 
-  <div class="panel-body">
-
-    <!-- Playback -->
-    <div class="section">
-      <div class="section-label">Playback</div>
-
-      <div class="row">
-        <span class="lbl">Day</span>
-        <select id="day">
-          <option>Mon</option><option>Tue</option><option>Wed</option>
-          <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
-        </select>
-        <span class="lbl" style="min-width:40px">Speed</span>
-        <select id="speed">
-          <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-        </select>
-      </div>
-
-      <div class="row">
-        <button id="playToggle">▶&nbsp;&nbsp;Play</button>
-      </div>
-
-      <div class="row" style="align-items:center;gap:8px;">
-        <span class="time-display" id="label">06:00</span>
-        <input id="minute" type="range" min="0" max="1439" value="360" step="1"/>
-      </div>
-
-      <div class="tick-track" style="margin-left:60px;">
-        <span style="left:0%">00:00</span>
-        <span style="left:25%">06:00</span>
-        <span style="left:50%">12:00</span>
-        <span style="left:75%">18:00</span>
-        <span style="left:100%">24:00</span>
-      </div>
-
-      <div class="jump-row">
-        <span class="lbl">Jump to</span>
-        <input id="startTime" class="timeInput" placeholder="HH:MM" value="06:00"/>
-        <button id="goTime">Go</button>
-        <span class="error-hint" id="timeError">Use HH:MM (e.g. 06:24)</span>
-      </div>
-    </div>
-
-    <!-- Display -->
-    <div class="section">
-      <div class="section-label">Display</div>
+  <!-- Collapsible display drawer -->
+  <div class="sp-drawer" id="displayDrawer">
+    <div class="sp-drawer-inner">
+      <div class="kicker">Display Settings</div>
 
       <div class="check-row">
         <input type="checkbox" id="showIcon" checked />
-        <label for="showIcon">Show bus icons</label>
+        <label for="showIcon">Bus icons</label>
       </div>
-      <div class="row">
+      <div class="form-row">
         <span class="lbl" style="padding-left:18px">Icon size</span>
-        <input id="iconSize" type="range" min="4" max="48" value="8" step="1"/>
-        <span class="val" id="iconSizeLabel">8</span>
-        <span class="hint">pt</span>
+        <input id="iconSize" type="range" min="4" max="48" value="8"/>
+        <span class="val" id="iconSizeLabel">8</span><span class="hint">pt</span>
       </div>
 
-      <div class="check-row" style="margin-top:4px">
+      <div class="check-row">
         <input type="checkbox" id="showTrail" checked />
         <label for="showTrail">Comet tail</label>
       </div>
-      <div class="row">
+      <div class="form-row">
         <span class="lbl" style="padding-left:18px">Tail length</span>
-        <input id="trailFrames" type="range" min="2" max="12" value="5" step="1"/>
-        <span class="val" id="trailFramesLabel">5</span>
-        <span class="hint">frames</span>
+        <input id="trailFrames" type="range" min="2" max="12" value="5"/>
+        <span class="val" id="trailFramesLabel">5</span><span class="hint">frames</span>
       </div>
 
-      <div class="row" style="margin-top:4px">
+      <div class="form-row">
         <span class="lbl" style="padding-left:18px">Point size</span>
-        <input id="pointSize" type="range" min="2" max="20" value="6" step="1"/>
+        <input id="pointSize" type="range" min="2" max="20" value="6"/>
         <span class="val" id="pointSizeLabel">6</span>
       </div>
-      <div class="row"><span class="hint" style="margin-left:90px">Scatter mode · scales with zoom</span></div>
 
-      <div class="check-row" style="margin-top:6px">
+      <div class="divider"></div>
+
+      <div class="check-row">
         <input type="checkbox" id="showLines" checked />
-        <label for="showLines">Show route lines</label>
+        <label for="showLines">Route lines</label>
       </div>
-      <div class="row">
+      <div class="form-row">
         <span class="lbl" style="padding-left:18px">Width</span>
-        <input id="lineWidth" type="range" min="1" max="14" value="2" step="1"/>
-        <span class="val" id="lineWidthLabel">2</span>
-        <span class="hint">pt</span>
+        <input id="lineWidth" type="range" min="1" max="14" value="2"/>
+        <span class="val" id="lineWidthLabel">2</span><span class="hint">pt</span>
       </div>
-      <div class="row">
+      <div class="form-row">
         <span class="lbl" style="padding-left:18px">Opacity</span>
-        <input id="lineOpacity" type="range" min="0" max="100" value="55" step="1"/>
+        <input id="lineOpacity" type="range" min="0" max="100" value="55"/>
         <span class="val" id="lineOpacityLabel">55%</span>
       </div>
     </div>
+  </div>
 
-    <!-- Route filter -->
-    <div class="section">
-      <div class="section-label">Route filter &nbsp;<span class="hint" style="text-transform:none;letter-spacing:0">RouteNo → RouteVar</span></div>
-      <div class="row" style="margin-bottom:6px">
-        <button id="selectAll">All</button>
-        <button id="selectNone">Clear</button>
-        <span class="hint" id="routeCount">Routes: 0</span>
-        <span class="hint" id="filterModeLabel"></span>
-      </div>
-      <div class="routes" id="routesBox">
-        <input class="route-search" id="routeSearch" placeholder="Search route…" type="search" autocomplete="off"/>
-        <div class="hint" style="padding:8px 10px">Loading routes…</div>
-      </div>
+  <!-- Status bar -->
+  <div class="sp-stat">
+    <span class="stat-item">Time <span class="stat-val" id="statTime">—</span></span>
+    <span class="stat-item">Vehicles <span class="stat-val" id="statVehicles">—</span></span>
+    <span class="stat-item">Filter <span class="stat-val" id="statFilter">all</span></span>
+  </div>
+</div>
+
+<!-- =============================================
+     FIXED BOTTOM PLAYBAR
+============================================= -->
+<div id="playbar">
+  <!-- Play/pause -->
+  <button id="playToggle" title="Play / Pause">▶</button>
+
+  <!-- Day + Speed -->
+  <div class="pb-select-group">
+    <select id="day" title="Day of week">
+      <option>Mon</option><option>Tue</option><option>Wed</option>
+      <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
+    </select>
+    <select id="speed" title="Playback speed">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+
+  <!-- Inline time editor -->
+  <div class="pb-time-block" title="Click to edit time">
+    <input id="timeDisplay" type="text" value="06:00" maxlength="5" spellcheck="false"/>
+    <div class="pb-time-hint">tap to jump</div>
+  </div>
+
+  <!-- Timeline scrubber -->
+  <div class="pb-scrubber">
+    <div class="pb-track-wrap">
+      <div class="pb-gradient-track"></div>
+      <div class="pb-progress-line" id="progressLine"></div>
+      <input id="minuteSlider" type="range" min="0" max="1439" value="360"/>
     </div>
-
-    <!-- Status -->
-    <div class="stat-bar" id="stat">
-      <span class="stat-item">Time <span class="stat-val" id="statTime">—</span></span>
-      <span class="stat-item">Vehicles <span class="stat-val" id="statVehicles">—</span></span>
-      <span class="stat-item">Filter <span class="stat-val" id="statFilter">—</span></span>
+    <div class="pb-ticks">
+      <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
     </div>
+  </div>
+</div>
 
+<!-- =============================================
+     ROUTE FILTER MODAL (right drawer)
+============================================= -->
+<div id="filterModal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-drawer">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Route Filter</div>
+        <div class="modal-sub">Select routes and variants to display on the map</div>
+      </div>
+      <button class="icon-btn" id="modalClose" title="Close">✕</button>
+    </div>
+    <div class="modal-toolbar">
+      <input type="search" id="routeSearch" placeholder="Search route name or number…" autocomplete="off"/>
+      <div class="sel-count" id="selCount"><b>—</b> / — selected</div>
+      <button class="sm-btn" id="selectAll">All</button>
+      <button class="sm-btn" id="selectNone">Clear</button>
+    </div>
+    <div class="modal-body" id="routesBox">
+      <div style="padding:16px 20px;color:var(--muted);font-size:0.78rem">Loading routes…</div>
+    </div>
   </div>
 </div>
 
@@ -325,661 +517,622 @@
 const {IconLayer, ScatterplotLayer, PathLayer} = deck;
 const {MapboxOverlay} = deck;
 
-// ---------------- Map ----------------
+// ================================================================
+// MAP
+// ================================================================
 const map = new maplibregl.Map({
   container: "map",
-  style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
   center: [106.7, 10.77],
   zoom: 11
 });
 const overlay = new MapboxOverlay({layers: []});
 map.addControl(overlay);
+map.addControl(new maplibregl.NavigationControl(), "bottom-right");
 
-// ---------------- Trail state ----------------
-// vehicleId -> circular queue of [lng, lat] (oldest first)
-const vehicleTrail = new Map();
+// ================================================================
+// VEHICLE STATE  (TripId → {prevPos,currPos,heading,trail,routeId,routeVarId})
+// ================================================================
+const vehicleState = new Map();
 
-// ---------------- UI refs ----------------
+function clearVehicleState(){ vehicleState.clear(); }
+
+// ================================================================
+// INTERPOLATION ENGINE
+// ================================================================
+let rafId = null;
+let interpT = 1;
+let interpDuration = 1000;
+let interpStartTime = null;
+const interpBadge = document.getElementById("interpBadge");
+
+function startInterp(){
+  if(rafId) cancelAnimationFrame(rafId);
+  interpStartTime = performance.now();
+  interpBadge.classList.add("show");
+  function frame(now){
+    interpT = Math.min((now - interpStartTime) / interpDuration, 1);
+    renderLayersInterpolated(interpT);
+    if(interpT < 1) rafId = requestAnimationFrame(frame);
+    else { rafId = null; interpBadge.classList.remove("show"); }
+  }
+  rafId = requestAnimationFrame(frame);
+}
+function stopInterp(){
+  if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
+  interpBadge.classList.remove("show");
+  interpT = 1;
+}
+
+// ================================================================
+// UI REFS
+// ================================================================
 const daySel           = document.getElementById("day");
-const minuteSel        = document.getElementById("minute");
-const labelEl          = document.getElementById("label");
+const minuteSlider     = document.getElementById("minuteSlider");
+const timeDisplay      = document.getElementById("timeDisplay");
+const progressLine     = document.getElementById("progressLine");
 const statTime         = document.getElementById("statTime");
 const statVehicles     = document.getElementById("statVehicles");
 const statFilter       = document.getElementById("statFilter");
 const btnPlayToggle    = document.getElementById("playToggle");
 const speedSel         = document.getElementById("speed");
-
 const showIconChk      = document.getElementById("showIcon");
 const iconSizeSel      = document.getElementById("iconSize");
 const iconSizeLabel    = document.getElementById("iconSizeLabel");
-
 const showTrailChk     = document.getElementById("showTrail");
 const trailFramesSel   = document.getElementById("trailFrames");
 const trailFramesLabel = document.getElementById("trailFramesLabel");
-
 const pointSizeSel     = document.getElementById("pointSize");
 const pointSizeLabel   = document.getElementById("pointSizeLabel");
-
 const showLinesChk     = document.getElementById("showLines");
 const lineWidthSel     = document.getElementById("lineWidth");
 const lineWidthLabel   = document.getElementById("lineWidthLabel");
-
 const lineOpacitySel   = document.getElementById("lineOpacity");
 const lineOpacityLabel = document.getElementById("lineOpacityLabel");
-
 const routesBox        = document.getElementById("routesBox");
-const routeCount       = document.getElementById("routeCount");
-const filterModeLabel  = document.getElementById("filterModeLabel");
+const selCount         = document.getElementById("selCount");
 const btnAll           = document.getElementById("selectAll");
 const btnNone          = document.getElementById("selectNone");
-const startTimeInp     = document.getElementById("startTime");
-const goTimeBtn        = document.getElementById("goTime");
-const timeError        = document.getElementById("timeError");
 const routeSearch      = document.getElementById("routeSearch");
-const collapseBtn      = document.getElementById("collapseBtn");
-const panel            = document.getElementById("panel");
+const filterBtn        = document.getElementById("filterBtn");
+const filterModal      = document.getElementById("filterModal");
+const modalBackdrop    = document.getElementById("modalBackdrop");
+const modalClose       = document.getElementById("modalClose");
+const displayToggle    = document.getElementById("displayToggle");
+const displayDrawer    = document.getElementById("displayDrawer");
 
-// ---------------- Collapse ----------------
-collapseBtn.addEventListener("click", () => {
-  const collapsed = panel.classList.toggle("collapsed");
-  collapseBtn.innerHTML = collapsed ? "&#x25BC;" : "&#x25B4;";
-  collapseBtn.title = collapsed ? "Expand panel" : "Collapse panel";
+// ================================================================
+// UI INTERACTIONS
+// ================================================================
+
+// Display drawer toggle
+displayToggle.addEventListener("click",()=>{
+  const open = displayDrawer.classList.toggle("open");
+  displayToggle.classList.toggle("active", open);
 });
 
-// ---------------- Helpers ----------------
-function hhmm(m){
-  return String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
-}
+// Filter modal
+filterBtn.addEventListener("click",()=>{ filterModal.classList.add("open"); filterBtn.classList.add("active"); });
+function closeModal(){ filterModal.classList.remove("open"); filterBtn.classList.remove("active"); }
+modalBackdrop.addEventListener("click", closeModal);
+modalClose.addEventListener("click", closeModal);
+
+// Inline time editor — click time display to jump
+timeDisplay.addEventListener("keydown", e=>{
+  if(e.key==="Enter"){
+    e.preventDefault();
+    const v = parseHHMM(timeDisplay.value);
+    if(v===null){ timeDisplay.classList.add("error"); return; }
+    timeDisplay.classList.remove("error");
+    timeDisplay.blur();
+    stopPlay(); clearVehicleState();
+    minuteSlider.value = clamp(v, 0, 1439);
+    updateProgress();
+    loadAndRender();
+  }
+  if(e.key==="Escape"){ timeDisplay.blur(); timeDisplay.classList.remove("error"); }
+});
+timeDisplay.addEventListener("input",()=>{ timeDisplay.classList.remove("error"); });
+timeDisplay.addEventListener("blur",()=>{ timeDisplay.value = hhmm(+minuteSlider.value); timeDisplay.classList.remove("error"); });
+
+// ================================================================
+// HELPERS
+// ================================================================
+function hhmm(m){ return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
 function parseHHMM(s){
-  const m = /^(\d{1,2}):(\d{2})$/.exec((s||"").trim());
-  if (!m) return null;
-  const hh = +m[1], mm = +m[2];
-  if (!Number.isFinite(hh)||!Number.isFinite(mm)) return null;
-  if (hh<0||hh>23||mm<0||mm>59) return null;
-  return hh*60 + mm;
+  const m=/^(\d{1,2}):(\d{2})$/.exec((s||"").trim());
+  if(!m) return null;
+  const hh=+m[1],mm=+m[2];
+  if(!Number.isFinite(hh)||!Number.isFinite(mm)||hh<0||hh>23||mm<0||mm>59) return null;
+  return hh*60+mm;
 }
-function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
 
-// Perceptually distributed HSL color per route
+function bearing(from,to){
+  const[lng1,lat1]=from,[lng2,lat2]=to;
+  const dL=(lng2-lng1)*Math.PI/180;
+  const la1=lat1*Math.PI/180, la2=lat2*Math.PI/180;
+  const y=Math.sin(dL)*Math.cos(la2);
+  const x=Math.cos(la1)*Math.sin(la2)-Math.sin(la1)*Math.cos(la2)*Math.cos(dL);
+  return(Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+
 function colorByRouteId(routeId){
-  const key = String(routeId);
-  let h = 0;
-  for (let i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i)) | 0;
-  const hue = (h >>> 0) % 360;
-  const sat = 65 + (((h>>>8)  & 0xff) % 25);
-  const lit = 38 + (((h>>>16) & 0xff) % 18);
-  const s = sat/100, l = lit/100;
-  const a2 = s * Math.min(l, 1-l);
-  const f = n => { const k=(n+hue/30)%12; return l - a2*Math.max(-1,Math.min(k-3,9-k,1)); };
-  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255), 220];
+  const key=String(routeId); let h=0;
+  for(let i=0;i<key.length;i++) h=(h*31+key.charCodeAt(i))|0;
+  const hue=(h>>>0)%360;
+  const sat=65+(((h>>>8)&0xff)%25);
+  const lit=38+(((h>>>16)&0xff)%18);
+  const s=sat/100,l=lit/100;
+  const a2=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+hue/30)%12;return l-a2*Math.max(-1,Math.min(k-3,9-k,1));};
+  return[Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255),220];
 }
 
-// Zoom-scaled sizes
-function zoomToIconSize(basePx){
-  const z = map.getZoom();
-  return Math.max(4, basePx * Math.pow(2, (z-12)*0.7));
-}
-function zoomToLineWidth(basePx){
-  const z = map.getZoom();
-  return Math.max(0.5, basePx * Math.pow(2, (z-12)*0.7));
-}
-function zoomToPointRadiusMeters(baseMeters){
-  const z = map.getZoom();
-  return Math.max(1, baseMeters * Math.pow(2, (z-12)*0.35));
+function zoomToIconSize(b){ const z=map.getZoom(); return Math.max(4,b*Math.pow(2,(z-12)*0.7)); }
+function zoomToLineWidth(b){ const z=map.getZoom(); return Math.max(0.5,b*Math.pow(2,(z-12)*0.7)); }
+function zoomToPointR(b){ const z=map.getZoom(); return Math.max(1,b*Math.pow(2,(z-12)*0.35)); }
+
+// Zoom-based line opacity: fade out route lines when zoomed out (crowded), full at zoom 13+
+function zoomLineAlpha(baseAlpha){
+  const z=map.getZoom();
+  const factor=clamp((z-9)/4,0,1); // 0 at zoom9, 1 at zoom13+
+  return Math.round(baseAlpha*factor);
 }
 
-// Stable per-vehicle key
-// If your CSV has a VehicleId column, replace with: return d.VehicleId;
-function vehicleId(d){
-  return `${d.RouteId}:${d.RouteVarId}:${d.lng.toFixed(3)}:${d.lat.toFixed(3)}`;
+function rvKey(rid,rvid){
+  return `${String(rid)}:${(rvid===undefined||rvid===null||rvid==="")?'NA':String(rvid)}`;
 }
 
-// ---------------- Route key ----------------
-function rvKey(routeId, routeVarId){
-  const rid  = String(routeId);
-  const rvid = (routeVarId===undefined||routeVarId===null||routeVarId==="") ? "NA" : String(routeVarId);
-  return `${rid}:${rvid}`;
+// Progress bar update
+function updateProgress(){
+  const pct=(+minuteSlider.value/1439)*100;
+  progressLine.style.width=pct+"%";
+  timeDisplay.value=hhmm(+minuteSlider.value);
 }
 
-// ---------------- Files ----------------
+// ================================================================
+// FILES / CACHES
+// ================================================================
 const DATA_BASE        = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
 const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
 const ROUTE_META_URL   = "data/routes_meta.json";
 const BUS_ICON_URL     = "assets/bus.png";
-const ICON_MAPPING     = { bus:{x:0,y:0,width:64,height:64,anchorY:64} };
+const ICON_MAPPING     = {bus:{x:0,y:0,width:64,height:64,anchorY:64}};
 
-// ---------------- Caches ----------------
 const csvCache  = new Map();
 let routeMeta   = null;
 let routeLines  = null;
 let routesByDay = new Map();
 
-async function fetchJson(url){
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-  return res.json();
-}
-async function getRouteMeta(){
-  if (routeMeta) return routeMeta;
-  routeMeta = await fetchJson(ROUTE_META_URL).catch(e => {
-    console.warn("routes_meta.json missing; fallback to RouteId.", e);
-    return {};
-  });
-  return routeMeta;
-}
+async function fetchJson(u){ const r=await fetch(u); if(!r.ok) throw new Error(`Fetch failed: ${u}`); return r.json(); }
+async function getRouteMeta(){ if(routeMeta) return routeMeta; routeMeta=await fetchJson(ROUTE_META_URL).catch(e=>{console.warn(e);return{};}); return routeMeta; }
+
 async function getDayCsv(day){
-  if (csvCache.has(day)) return csvCache.get(day);
-  const url = `${DATA_BASE}/${day}.csv`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-  const text = await res.text();
-  csvCache.set(day, text);
-  return text;
+  if(csvCache.has(day)) return csvCache.get(day);
+  const u=`${DATA_BASE}/${day}.csv`;
+  const r=await fetch(u); if(!r.ok) throw new Error(`Fetch failed: ${u}`);
+  const t=await r.text(); csvCache.set(day,t); return t;
 }
+
 async function loadRouteLines(){
-  if (routeLines) return routeLines;
-  const gj = await fetchJson(LINE_GEOJSON_URL).catch(e => {
-    console.warn("route_shape_lines.geojson missing.", e);
-    return {features:[]};
-  });
-  const out = [];
-  for (const f of (gj.features||[])){
-    const props = f.properties||{};
-    const geom  = f.geometry||{};
-    const rid   = props.RouteId??props.routeid??props.route_id??props.ROUTEID;
-    const rvid  = props.RouteVarId??props.routevarid??props.route_var_id??props.ROUTEVARID;
-    if (!rid) continue;
-    if (geom.type==="LineString"){
-      out.push({RouteId:String(rid), RouteVarId:(rvid??"")!==""?String(rvid):"NA", path:geom.coordinates});
-    } else if (geom.type==="MultiLineString"){
-      for (const coords of geom.coordinates)
-        out.push({RouteId:String(rid), RouteVarId:(rvid??"")!==""?String(rvid):"NA", path:coords});
-    }
+  if(routeLines) return routeLines;
+  const gj=await fetchJson(LINE_GEOJSON_URL).catch(e=>{console.warn(e);return{features:[]};});
+  const out=[];
+  for(const f of(gj.features||[])){
+    const p=f.properties||{},g=f.geometry||{};
+    const rid=p.RouteId??p.routeid??p.route_id??p.ROUTEID;
+    const rvid=p.RouteVarId??p.routevarid??p.route_var_id??p.ROUTEVARID;
+    if(!rid) continue;
+    const RV=(rvid??"")!==""?String(rvid):"NA";
+    if(g.type==="LineString") out.push({RouteId:String(rid),RouteVarId:RV,path:g.coordinates});
+    else if(g.type==="MultiLineString") for(const c of g.coordinates) out.push({RouteId:String(rid),RouteVarId:RV,path:c});
   }
-  routeLines = out;
-  return routeLines;
+  routeLines=out; return routeLines;
 }
 
 async function getRouteVarIndexForDay(day){
-  if (routesByDay.has(day)) return routesByDay.get(day);
-  const text  = await getDayCsv(day);
-  const lines = text.trim().split("\n");
-  if (lines.length<=1){
-    const empty = {byRouteId:new Map(), allKeys:new Set()};
-    routesByDay.set(day, empty);
-    return empty;
+  if(routesByDay.has(day)) return routesByDay.get(day);
+  const text=await getDayCsv(day);
+  const lines=text.trim().split("\n");
+  if(lines.length<=1){ const e={byRouteId:new Map(),allKeys:new Set()}; routesByDay.set(day,e); return e; }
+  const header=lines[0].split(",");
+  const iR=header.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const iV=header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+  if(iR<0) throw new Error("CSV missing RouteId");
+  const byRouteId=new Map(),allKeys=new Set();
+  for(let i=1;i<lines.length;i++){
+    const c=lines[i].split(","); const rid=c[iR]; if(!rid) continue;
+    const R=String(rid);
+    const V=(iV>=0)?(((c[iV]??"")!=="")?String(c[iV]):"NA"):"NA";
+    if(!byRouteId.has(R)) byRouteId.set(R,new Set());
+    byRouteId.get(R).add(V); allKeys.add(rvKey(R,V));
   }
-  const header        = lines[0].split(",");
-  const idxRouteId    = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const idxRouteVarId = header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  if (idxRouteId<0) throw new Error("CSV header missing RouteId");
-  const byRouteId = new Map(), allKeys = new Set();
-  for (let i=1;i<lines.length;i++){
-    const c = lines[i].split(",");
-    const rid = c[idxRouteId];
-    if (!rid) continue;
-    const R = String(rid);
-    const V = (idxRouteVarId>=0)?(((c[idxRouteVarId]??"")!=="")?String(c[idxRouteVarId]):"NA"):"NA";
-    if (!byRouteId.has(R)) byRouteId.set(R, new Set());
-    byRouteId.get(R).add(V);
-    allKeys.add(rvKey(R,V));
-  }
-  const idx = {byRouteId, allKeys};
-  routesByDay.set(day, idx);
-  return idx;
+  const idx={byRouteId,allKeys}; routesByDay.set(day,idx); return idx;
 }
 
-// ---------------- Filter state ----------------
+// ================================================================
+// FILTER STATE
+// ================================================================
 let filterMode   = "all";
 let selectedKeys = new Set();
+let totalRouteVarCount = 0;
 
 function setFilterMode(mode){
-  filterMode = mode;
-  if (mode!=="custom") selectedKeys = new Set();
-  filterModeLabel.textContent = mode==="custom" ? `custom (${selectedKeys.size})` : mode;
+  filterMode=mode;
+  if(mode!=="custom") selectedKeys=new Set();
+  updateFilterStatus();
 }
-function keyAllowed(routeId, routeVarId){
-  if (filterMode==="all")  return true;
-  if (filterMode==="none") return false;
-  return selectedKeys.has(rvKey(routeId, routeVarId));
+function keyAllowed(rid,rvid){
+  if(filterMode==="all") return true;
+  if(filterMode==="none") return false;
+  return selectedKeys.has(rvKey(rid,rvid));
+}
+function updateFilterStatus(){
+  // Status in panel
+  if(filterMode==="all") statFilter.textContent="all";
+  else if(filterMode==="none") statFilter.textContent="none";
+  else statFilter.textContent=`${selectedKeys.size} vars`;
+
+  // Count in modal toolbar
+  const sel = filterMode==="all" ? totalRouteVarCount : filterMode==="none" ? 0 : selectedKeys.size;
+  selCount.innerHTML=`<b>${sel}</b> / ${totalRouteVarCount} selected`;
 }
 
-// ---------------- CSV parse ----------------
+// ================================================================
+// CSV PARSE — TripId-aware
+// ================================================================
 function parseCsvMinute(csvText, targetMinute){
-  const lines = csvText.trim().split("\n");
-  if (lines.length<=1) return {points:[], header:[]};
-  const header        = lines[0].split(",");
-  const idxMinute     = header.findIndex(h=>h.trim().toLowerCase()==="minute");
-  const idxLng        = header.findIndex(h=>h.trim().toLowerCase()==="lng");
-  const idxLat        = header.findIndex(h=>h.trim().toLowerCase()==="lat");
-  const idxRouteId    = header.findIndex(h=>h.trim().toLowerCase()==="routeid");
-  const idxRouteVarId = header.findIndex(h=>h.trim().toLowerCase()==="routevarid");
-  if (idxMinute<0||idxLng<0||idxLat<0||idxRouteId<0)
-    throw new Error("CSV header must include minute,lng,lat,RouteId");
-  const pts = [];
-  for (let i=1;i<lines.length;i++){
-    const c = lines[i].split(",");
-    if (+c[idxMinute]!==targetMinute) continue;
-    const rid  = String(c[idxRouteId]);
-    const rvid = (idxRouteVarId>=0)?(((c[idxRouteVarId]??"")!=="")?String(c[idxRouteVarId]):"NA"):"NA";
-    if (!keyAllowed(rid,rvid)) continue;
-    const lng = +c[idxLng], lat = +c[idxLat];
-    if (!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-    pts.push({lng, lat, RouteId:rid, RouteVarId:rvid});
+  const lines=csvText.trim().split("\n");
+  if(lines.length<=1) return new Map();
+  const hdr=lines[0].split(",");
+  const iMin=hdr.findIndex(h=>h.trim().toLowerCase()==="minute");
+  const iLng=hdr.findIndex(h=>h.trim().toLowerCase()==="lng");
+  const iLat=hdr.findIndex(h=>h.trim().toLowerCase()==="lat");
+  const iR  =hdr.findIndex(h=>h.trim().toLowerCase()==="routeid");
+  const iV  =hdr.findIndex(h=>h.trim().toLowerCase()==="routevarid");
+  const iT  =hdr.findIndex(h=>h.trim().toLowerCase()==="tripid");
+  if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error("CSV missing required columns");
+  const result=new Map();
+  for(let i=1;i<lines.length;i++){
+    const c=lines[i].split(",");
+    if(+c[iMin]!==targetMinute) continue;
+    const rid=String(c[iR]);
+    const rvid=(iV>=0)?(((c[iV]??"")!=="")?String(c[iV]):"NA"):"NA";
+    if(!keyAllowed(rid,rvid)) continue;
+    const lng=+c[iLng],lat=+c[iLat];
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    const tripId=(iT>=0&&c[iT]?.trim())?String(c[iT].trim()):`${rid}:${rvid}:${lng.toFixed(3)}:${lat.toFixed(3)}`;
+    result.set(tripId,{lng,lat,routeId:rid,routeVarId:rvid,tripId});
   }
-  return {points:pts, header};
+  return result;
 }
 
-// ---------------- Route list UI ----------------
-let currentRouteSearch = "";
-let lastDayIndex = null;
-
-routeSearch.addEventListener("input", () => {
-  currentRouteSearch = routeSearch.value.trim().toLowerCase();
-  renderRouteBlocks();
-});
-
-async function renderRouteCheckboxes(dayIndex){
-  lastDayIndex = dayIndex;
-  await getRouteMeta();
-  renderRouteBlocks();
+// ================================================================
+// VEHICLE STATE UPDATE
+// ================================================================
+function updateVehicleState(newFrame){
+  const TRAIL_MAX=+trailFramesSel.value;
+  const active=new Set(newFrame.keys());
+  for(const[tripId,data] of newFrame){
+    if(vehicleState.has(tripId)){
+      const vs=vehicleState.get(tripId);
+      const prev=vs.currPos, curr=[data.lng,data.lat];
+      const moved=Math.abs(curr[0]-prev[0])>0.00001||Math.abs(curr[1]-prev[1])>0.00001;
+      vs.prevPos=prev; vs.currPos=curr;
+      if(moved) vs.heading=bearing(prev,curr);
+      if(showTrailChk.checked){ vs.trail.push([...prev]); while(vs.trail.length>TRAIL_MAX) vs.trail.shift(); }
+    } else {
+      vehicleState.set(tripId,{
+        prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],
+        heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId
+      });
+    }
+  }
+  for(const tid of vehicleState.keys()) if(!active.has(tid)) vehicleState.delete(tid);
 }
 
-function renderRouteBlocks(){
-  const dayIndex = lastDayIndex;
-  if (!dayIndex) return;
-  const meta = routeMeta || {};
-
-  routesBox.querySelectorAll(".routeBlock").forEach(b=>b.remove());
-
-  let routeIds = Array.from(dayIndex.byRouteId.keys()).sort((a,b)=>(+a)-(+b));
-  if (currentRouteSearch){
-    routeIds = routeIds.filter(rid => {
-      const m    = meta[rid]||{};
-      const no   = String(m.RouteNo||rid).toLowerCase();
-      const name = String(m.RouteName||"").toLowerCase();
-      return no.includes(currentRouteSearch)||name.includes(currentRouteSearch);
+function getInterpolatedPoints(t){
+  const pts=[];
+  for(const[,vs] of vehicleState){
+    pts.push({
+      lng:lerp(vs.prevPos[0],vs.currPos[0],t),
+      lat:lerp(vs.prevPos[1],vs.currPos[1],t),
+      heading:vs.heading, routeId:vs.routeId
     });
   }
-
-  routeCount.textContent = `Routes: ${routeIds.length}`;
-
-  for (const rid of routeIds){
-    const m         = meta[rid]||{};
-    const routeNo   = m.RouteNo||rid;
-    const routeName = m.RouteName||"";
-    const vars = Array.from(dayIndex.byRouteId.get(rid)||new Set(["NA"]))
-      .sort((a,b)=>String(a).localeCompare(String(b),"en",{numeric:true}));
-
-    const block = document.createElement("div");
-    block.className = "routeBlock";
-
-    const head = document.createElement("div");
-    head.className = "routeHead";
-
-    const btnCol = document.createElement("div");
-    btnCol.className = "btnCol";
-
-    const toggleBtn = document.createElement("button");
-    const allVarKeys = vars.map(v=>rvKey(rid,v));
-    const refreshLabel = () => {
-      toggleBtn.textContent = allVarKeys.every(k=>selectedKeys.has(k)) ? "Deselect" : "Select";
-    };
-    refreshLabel();
-    toggleBtn.onclick = () => {
-      if (filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
-      const allSel = allVarKeys.every(k=>selectedKeys.has(k));
-      if (allSel){ allVarKeys.forEach(k=>selectedKeys.delete(k)); }
-      else       { allVarKeys.forEach(k=>selectedKeys.add(k)); }
-      if (selectedKeys.size===0) setFilterMode("none");
-      if (selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
-      renderRouteBlocks();
-      loadAndRender();
-    };
-    btnCol.appendChild(toggleBtn);
-
-    const infoCol = document.createElement("div");
-    infoCol.className = "infoCol";
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "titleRow";
-
-    const col  = colorByRouteId(rid);
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.style.borderLeft = `8px solid rgba(${col[0]},${col[1]},${col[2]},${(col[3]/255).toFixed(2)})`;
-    chip.textContent = `Route ${routeNo}`;
-
-    const title = document.createElement("div");
-    title.appendChild(chip);
-    titleRow.appendChild(title);
-    infoCol.appendChild(titleRow);
-
-    if (routeName){
-      const desc = document.createElement("div");
-      desc.className = "descRow";
-      desc.textContent = routeName;
-      infoCol.appendChild(desc);
-    }
-
-    const varsRow = document.createElement("div");
-    varsRow.className = "varsRow";
-    varsRow.textContent = `Vars: ${vars.join(", ")}`;
-    infoCol.appendChild(varsRow);
-
-    head.appendChild(btnCol);
-    head.appendChild(infoCol);
-    block.appendChild(head);
-
-    for (const v of vars){
-      const row = document.createElement("div");
-      row.className = "routeVarRow";
-
-      const cbCol = document.createElement("div");
-      cbCol.className = "cbCol";
-
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = keyAllowed(rid, v);
-      cb.onchange = () => {
-        if (filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
-        const k = rvKey(rid,v);
-        if (cb.checked) selectedKeys.add(k);
-        else selectedKeys.delete(k);
-        if (selectedKeys.size===0) setFilterMode("none");
-        if (selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
-        renderRouteBlocks();
-        loadAndRender();
-      };
-      cbCol.appendChild(cb);
-
-      const lab = document.createElement("div");
-      lab.style.fontSize = "11px";
-      lab.innerHTML = `<b>VarId</b>: <code>${v}</code>`;
-
-      row.appendChild(cbCol);
-      row.appendChild(lab);
-      block.appendChild(row);
-    }
-
-    routesBox.appendChild(block);
-  }
+  return pts;
 }
 
-// ---------------- Render layers ----------------
-function renderLayers(points, minute, linesData){
-  const layers = [];
-  const lineOpacity = clamp(+lineOpacitySel.value, 0, 100) / 100;
-  const lineAlpha   = Math.round(255 * lineOpacity);
-  const iconPx      = zoomToIconSize(+iconSizeSel.value);
-  const TRAIL_MAX   = +trailFramesSel.value;
+// ================================================================
+// RENDER LAYERS
+// ================================================================
+let cachedLines=null;
 
-  // 1. Route lines (bottom-most)
-  if (showLinesChk.checked && linesData && linesData.length){
-    const filteredLines = linesData.filter(l=>keyAllowed(l.RouteId, l.RouteVarId));
+function renderLayersInterpolated(t){
+  const layers=[];
+  const baseAlpha=Math.round(255*clamp(+lineOpacitySel.value,0,100)/100);
+  const lineAlpha=zoomLineAlpha(baseAlpha);   // fade out at low zoom
+  const iconPx=zoomToIconSize(+iconSizeSel.value);
+
+  // 1. Route lines — zoom-adaptive opacity + selected/unselected contrast
+  if(showLinesChk.checked&&cachedLines&&cachedLines.length){
+    const fl=cachedLines.filter(l=>keyAllowed(l.RouteId,l.RouteVarId));
     layers.push(new PathLayer({
-      id: "route-lines",
-      data: filteredLines,
-      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
-      getPath:      d => d.path,
-      getWidth:     zoomToLineWidth(+lineWidthSel.value),
-      widthUnits:   "pixels",
-      getColor:     d => { const c=colorByRouteId(d.RouteId); return [c[0],c[1],c[2],lineAlpha]; },
-      jointRounded: true,
-      capRounded:   true,
-      pickable:     false,
-      parameters:   {depthTest:false}
+      id:"route-lines",data:fl,
+      coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
+      getPath:d=>d.path,
+      getWidth:zoomToLineWidth(+lineWidthSel.value),
+      widthUnits:"pixels",
+      getColor:d=>{
+        const c=colorByRouteId(d.RouteId);
+        // If custom filter: selected routes full opacity, others at 30%
+        const alpha=(filterMode==="custom"&&!selectedKeys.has(rvKey(d.RouteId,d.RouteVarId)))
+          ?Math.round(lineAlpha*0.3):lineAlpha;
+        return[c[0],c[1],c[2],alpha];
+      },
+      jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
     }));
   }
 
-  // 2. Update vehicle trail history (only while playing)
-  if (showIconChk.checked && showTrailChk.checked && playing){
-    // Index current positions
-    const currentById = new Map();
-    for (const pt of points) currentById.set(vehicleId(pt), pt);
-
-    // Append current pos to each vehicle's queue
-    for (const [vid, pt] of currentById){
-      if (!vehicleTrail.has(vid)) vehicleTrail.set(vid, []);
-      const q = vehicleTrail.get(vid);
-      q.push([pt.lng, pt.lat]);
-      // Keep only TRAIL_MAX + 1 entries (tail + head)
-      while (q.length > TRAIL_MAX + 1) q.shift();
+  // 2. Comet tails
+  if(showTrailChk.checked){
+    const tailData=[];
+    for(const[,vs] of vehicleState){
+      if(vs.trail.length<1) continue;
+      const ip=[lerp(vs.prevPos[0],vs.currPos[0],t),lerp(vs.prevPos[1],vs.currPos[1],t)];
+      tailData.push({path:[...vs.trail,ip],routeId:vs.routeId});
     }
-
-    // Evict vehicles no longer in current frame
-    for (const vid of vehicleTrail.keys()){
-      if (!currentById.has(vid)) vehicleTrail.delete(vid);
-    }
-  }
-
-  // 3. Comet tail layer
-  if (showIconChk.checked && showTrailChk.checked && vehicleTrail.size > 0){
-    const tailData = [];
-    for (const [vid, queue] of vehicleTrail){
-      if (queue.length < 2) continue;
-      const routeId = vid.split(":")[0];
-      tailData.push({path: queue, routeId});
-    }
-
-    if (tailData.length > 0){
-      // Tail width tapers naturally because PathLayer renders the
-      // full path at one width; we use a slightly narrower value
-      // and rely on opacity + color lightening for the comet effect.
-      const tailWidth = Math.max(1.5, iconPx * 0.3);
-
+    if(tailData.length){
+      const tw=Math.max(1.5,iconPx*0.3);
       layers.push(new PathLayer({
-        id: "comet-tails",
-        data: tailData,
-        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
-        getPath:  d => d.path,
-        getWidth: tailWidth,
-        widthUnits: "pixels",
-        getColor: d => {
-          const c = colorByRouteId(d.routeId);
-          // Brighten the route color for a luminous comet glow
-          return [
-            Math.min(255, c[0] + 70),
-            Math.min(255, c[1] + 70),
-            Math.min(255, c[2] + 70),
-            160
-          ];
-        },
-        jointRounded: true,
-        capRounded:   true,
-        pickable:     false,
-        parameters:   {depthTest:false}
+        id:"comet-tails",data:tailData,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:d=>d.path,getWidth:tw,widthUnits:"pixels",
+        getColor:d=>{const c=colorByRouteId(d.routeId);return[Math.min(255,c[0]+70),Math.min(255,c[1]+70),Math.min(255,c[2]+70),150];},
+        jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
       }));
-
-      // Inner bright core of the tail (thinner, more opaque, pure white-tinted)
       layers.push(new PathLayer({
-        id: "comet-tails-core",
-        data: tailData,
-        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
-        getPath:  d => d.path,
-        getWidth: Math.max(0.8, tailWidth * 0.35),
-        widthUnits: "pixels",
-        getColor: d => {
-          const c = colorByRouteId(d.routeId);
-          return [
-            Math.min(255, c[0] + 120),
-            Math.min(255, c[1] + 120),
-            Math.min(255, c[2] + 120),
-            220
-          ];
-        },
-        jointRounded: true,
-        capRounded:   true,
-        pickable:     false,
-        parameters:   {depthTest:false}
+        id:"comet-core",data:tailData,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:d=>d.path,getWidth:Math.max(0.8,tw*0.35),widthUnits:"pixels",
+        getColor:d=>{const c=colorByRouteId(d.routeId);return[Math.min(255,c[0]+120),Math.min(255,c[1]+120),Math.min(255,c[2]+120),220];},
+        jointRounded:true,capRounded:true,pickable:false,parameters:{depthTest:false}
       }));
     }
   }
 
-  // 4. Bus icons / scatter points (top-most)
-  if (showIconChk.checked){
+  // 3. Vehicle icons / scatter
+  const pts=getInterpolatedPoints(t);
+  if(showIconChk.checked){
     layers.push(new IconLayer({
-      id: "bus-icons",
-      data: points,
-      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition: d => [d.lng, d.lat],
-      iconAtlas:   BUS_ICON_URL,
-      iconMapping: ICON_MAPPING,
-      getIcon:     () => "bus",
-      sizeUnits:   "pixels",
-      getSize:     iconPx,
-      getColor:    d => colorByRouteId(d.RouteId),
-      pickable:    false,
-      parameters:  {depthTest:false}
+      id:"bus-icons",data:pts,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition:d=>[d.lng,d.lat],
+      iconAtlas:BUS_ICON_URL,iconMapping:ICON_MAPPING,getIcon:()=>"bus",
+      sizeUnits:"pixels",getSize:iconPx,
+      getColor:d=>colorByRouteId(d.routeId),
+      getAngle:d=>d.heading,
+      pickable:false,parameters:{depthTest:false}
     }));
   } else {
-    const meters = zoomToPointRadiusMeters(+pointSizeSel.value * 8);
     layers.push(new ScatterplotLayer({
-      id: "bus-points",
-      data: points,
-      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
-      getPosition:  d => [d.lng, d.lat],
-      radiusUnits:  "meters",
-      getRadius:    meters,
-      getFillColor: d => colorByRouteId(d.RouteId),
-      pickable:     false,
-      parameters:   {depthTest:false}
+      id:"bus-pts",data:pts,coordinateSystem:deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition:d=>[d.lng,d.lat],
+      radiusUnits:"meters",getRadius:zoomToPointR(+pointSizeSel.value*8),
+      getFillColor:d=>colorByRouteId(d.routeId),
+      pickable:false,parameters:{depthTest:false}
     }));
   }
 
   overlay.setProps({layers});
-
-  // Status bar
-  statTime.textContent     = hhmm(minute);
-  statVehicles.textContent = points.length;
-  statFilter.textContent   = filterMode==="custom"
-    ? `custom (${selectedKeys.size} vars)` : filterMode;
 }
 
-// ---------------- Playback ----------------
-let timer   = null;
-let playing = false;
+// ================================================================
+// PLAYBACK
+// ================================================================
+let timer=null, playing=false;
 
-function clearTrail(){
-  vehicleTrail.clear();
-}
 function stopPlay(){
-  if (timer) clearInterval(timer);
-  timer   = null;
-  playing = false;
-  clearTrail();
-  btnPlayToggle.textContent = "▶\u00a0\u00a0Play";
-  btnPlayToggle.classList.remove("playing");
+  if(timer) clearInterval(timer);
+  timer=null; playing=false; stopInterp();
+  btnPlayToggle.innerHTML="▶"; btnPlayToggle.classList.remove("playing");
 }
 function startPlay(){
-  stopPlay();
-  playing = true;
-  btnPlayToggle.textContent = "⏸\u00a0\u00a0Pause";
-  btnPlayToggle.classList.add("playing");
-  const speed = +speedSel.value;
-  timer = setInterval(() => {
-    minuteSel.value = (+minuteSel.value + 1) % 1440;
-    loadAndRender();
-  }, 1000 / speed);
+  stopPlay(); playing=true;
+  btnPlayToggle.innerHTML="⏸"; btnPlayToggle.classList.add("playing");
+  interpDuration=1000/+speedSel.value;
+  timer=setInterval(async()=>{
+    minuteSlider.value=(+minuteSlider.value+1)%1440;
+    updateProgress();
+    await advanceMinute(+minuteSlider.value);
+  }, interpDuration);
+}
+btnPlayToggle.addEventListener("click",()=>{ if(playing) stopPlay(); else startPlay(); });
+
+// ================================================================
+// ADVANCE MINUTE
+// ================================================================
+async function advanceMinute(minute){
+  updateProgress();
+  updateLabels();
+  try{
+    const csvText=await getDayCsv(daySel.value);
+    const newFrame=parseCsvMinute(csvText,minute);
+    updateVehicleState(newFrame);
+    statTime.textContent=hhmm(minute);
+    statVehicles.textContent=vehicleState.size;
+    if(playing) startInterp();
+    else { stopInterp(); renderLayersInterpolated(1); }
+  } catch(e){
+    console.error(e);
+    statTime.textContent="Error"; statVehicles.textContent=e.message;
+    overlay.setProps({layers:[]});
+  }
 }
 
-btnPlayToggle.addEventListener("click", () => {
-  if (playing) stopPlay(); else startPlay();
-});
-
-// ---------------- Main ----------------
-async function loadAndRender(){
-  const day    = daySel.value;
-  const minute = +minuteSel.value;
-
-  labelEl.textContent          = hhmm(minute);
-  startTimeInp.value           = hhmm(minute);
+function updateLabels(){
   iconSizeLabel.textContent    = iconSizeSel.value;
   trailFramesLabel.textContent = trailFramesSel.value;
   pointSizeLabel.textContent   = pointSizeSel.value;
   lineWidthLabel.textContent   = lineWidthSel.value;
   lineOpacityLabel.textContent = `${lineOpacitySel.value}%`;
+}
 
+// ================================================================
+// INITIAL LOAD
+// ================================================================
+async function loadAndRender(){
+  const day=daySel.value, minute=+minuteSlider.value;
+  updateProgress(); updateLabels();
   try{
-    const [csvText, idx, lines] = await Promise.all([
-      getDayCsv(day),
-      getRouteVarIndexForDay(day),
-      loadRouteLines()
-    ]);
-
-    if (routesBox.dataset.day !== day){
-      routesBox.dataset.day = day;
-      await renderRouteCheckboxes(idx);
+    const[csvText,idx,lines]=await Promise.all([getDayCsv(day),getRouteVarIndexForDay(day),loadRouteLines()]);
+    cachedLines=lines;
+    if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(idx); }
+    const newFrame=parseCsvMinute(csvText,minute);
+    clearVehicleState();
+    for(const[tid,data] of newFrame){
+      vehicleState.set(tid,{prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
     }
-
-    const {points} = parseCsvMinute(csvText, minute);
-    renderLayers(points, minute, lines);
-
+    statTime.textContent=hhmm(minute);
+    statVehicles.textContent=vehicleState.size;
+    updateFilterStatus();
+    renderLayersInterpolated(1);
   } catch(e){
-    console.error(e);
-    statTime.textContent     = "Error";
-    statVehicles.textContent = e.message;
-    statFilter.textContent   = "";
+    console.error(e); statTime.textContent="Error"; statVehicles.textContent=e.message;
     overlay.setProps({layers:[]});
   }
 }
 
-// ---------------- Events ----------------
-daySel.onchange   = async () => { clearTrail(); stopPlay(); await loadAndRender(); };
-minuteSel.oninput = ()        => { clearTrail(); stopPlay(); loadAndRender(); };
-speedSel.onchange = ()        => { if (playing) startPlay(); };
+// ================================================================
+// ROUTE LIST UI — full-width modal with var-chips
+// ================================================================
+let currentSearch="";
+let lastDayIndex=null;
 
-showIconChk.onchange   = () => { clearTrail(); stopPlay(); loadAndRender(); };
-showTrailChk.onchange  = () => { clearTrail(); loadAndRender(); };
-trailFramesSel.oninput = () => { clearTrail(); loadAndRender(); };
-iconSizeSel.oninput    = () => { loadAndRender(); };
-pointSizeSel.oninput   = () => { loadAndRender(); };
-showLinesChk.onchange  = () => { loadAndRender(); };
-lineWidthSel.oninput   = () => { loadAndRender(); };
-lineOpacitySel.oninput = () => { loadAndRender(); };
+routeSearch.addEventListener("input",()=>{ currentSearch=routeSearch.value.trim().toLowerCase(); rebuildRouteList(); });
 
-btnAll.onclick  = async () => {
-  setFilterMode("all");
-  const idx = await getRouteVarIndexForDay(daySel.value);
-  await renderRouteCheckboxes(idx);
-  loadAndRender();
-};
-btnNone.onclick = async () => {
-  setFilterMode("none");
-  const idx = await getRouteVarIndexForDay(daySel.value);
-  await renderRouteCheckboxes(idx);
-  loadAndRender();
-};
-
-// Jump-to with inline error
-function doJump(){
-  const v = parseHHMM(startTimeInp.value);
-  if (v===null){
-    startTimeInp.classList.add("error");
-    timeError.classList.add("visible");
-    return;
-  }
-  startTimeInp.classList.remove("error");
-  timeError.classList.remove("visible");
-  clearTrail(); stopPlay();
-  minuteSel.value = clamp(v, 0, 1439);
-  loadAndRender();
+async function renderRouteBlocks(dayIndex){
+  lastDayIndex=dayIndex;
+  await getRouteMeta();
+  // Compute total var count for selection display
+  totalRouteVarCount=0;
+  for(const vars of dayIndex.byRouteId.values()) totalRouteVarCount+=vars.size;
+  rebuildRouteList();
 }
-goTimeBtn.onclick = doJump;
-startTimeInp.addEventListener("keydown", e => { if (e.key==="Enter") doJump(); });
-startTimeInp.addEventListener("input",   () => {
-  startTimeInp.classList.remove("error");
-  timeError.classList.remove("visible");
-});
 
-// Zoom → rescale icons, lines, scatter points
-map.on("zoom", () => { loadAndRender(); });
+function rebuildRouteList(){
+  const dayIndex=lastDayIndex; if(!dayIndex) return;
+  const meta=routeMeta||{};
+  routesBox.innerHTML="";
+  let routeIds=Array.from(dayIndex.byRouteId.keys()).sort((a,b)=>(+a)-(+b));
+  if(currentSearch) routeIds=routeIds.filter(rid=>{
+    const m=meta[rid]||{};
+    return String(m.RouteNo||rid).toLowerCase().includes(currentSearch)||
+           String(m.RouteName||"").toLowerCase().includes(currentSearch);
+  });
 
-// Start
-map.on("load", async () => {
+  for(const rid of routeIds){
+    const m=meta[rid]||{};
+    const routeNo=m.RouteNo||rid, routeName=m.RouteName||"";
+    const vars=Array.from(dayIndex.byRouteId.get(rid)||new Set(["NA"]))
+      .sort((a,b)=>String(a).localeCompare(String(b),"en",{numeric:true}));
+    const allVarKeys=vars.map(v=>rvKey(rid,v));
+    const col=colorByRouteId(rid);
+    const colorStr=`rgba(${col[0]},${col[1]},${col[2]},0.85)`;
+
+    const block=document.createElement("div"); block.className="routeBlock";
+
+    // Top row: chip + name + toggle btn
+    const topRow=document.createElement("div"); topRow.className="route-row-top";
+
+    const chip=document.createElement("span"); chip.className="chip";
+    chip.style.borderLeft=`4px solid ${colorStr}`;
+    chip.textContent=`Route ${routeNo}`;
+
+    const name=document.createElement("span"); name.className="route-name";
+    name.textContent=routeName;
+
+    const allSel=allVarKeys.every(k=>keyAllowed(rid,k.split(":")[1]));
+    const toggleBtn=document.createElement("button");
+    toggleBtn.className="route-toggle-btn"+(allSel?" selected":"");
+    toggleBtn.textContent=allSel?"✓ Selected":"Select all";
+    toggleBtn.onclick=()=>{
+      if(filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(); }
+      const nowSel=allVarKeys.every(k=>selectedKeys.has(k));
+      if(nowSel) allVarKeys.forEach(k=>selectedKeys.delete(k));
+      else allVarKeys.forEach(k=>selectedKeys.add(k));
+      if(selectedKeys.size===0) setFilterMode("none");
+      if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+      updateFilterStatus();
+      rebuildRouteList();
+      renderLayersInterpolated(interpT);
+    };
+
+    topRow.appendChild(chip);
+    topRow.appendChild(name);
+    topRow.appendChild(toggleBtn);
+    block.appendChild(topRow);
+
+    // Variant chips
+    const varsRow=document.createElement("div"); varsRow.className="route-vars";
+    for(const v of vars){
+      const k=rvKey(rid,v);
+      const allowed=keyAllowed(rid,v);
+      const vc=document.createElement("div");
+      vc.className="var-chip"+(allowed?" selected":"");
+      const dot=document.createElement("span"); dot.className="var-chip-dot";
+      dot.style.background=colorStr;
+      vc.appendChild(dot);
+      vc.appendChild(document.createTextNode(`Var ${v}`));
+      vc.onclick=()=>{
+        if(filterMode!=="custom"){ setFilterMode("custom"); selectedKeys=new Set(dayIndex.allKeys); }
+        if(selectedKeys.has(k)) selectedKeys.delete(k); else selectedKeys.add(k);
+        if(selectedKeys.size===0) setFilterMode("none");
+        if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+        updateFilterStatus();
+        rebuildRouteList();
+        renderLayersInterpolated(interpT);
+      };
+      varsRow.appendChild(vc);
+    }
+    block.appendChild(varsRow);
+    routesBox.appendChild(block);
+  }
+  updateFilterStatus();
+}
+
+// ================================================================
+// EVENTS
+// ================================================================
+daySel.onchange=async()=>{ stopPlay(); clearVehicleState(); cachedLines=null; await loadAndRender(); };
+
+minuteSlider.oninput=async()=>{ stopPlay(); updateProgress(); await advanceMinute(+minuteSlider.value); };
+
+speedSel.onchange=()=>{ interpDuration=1000/+speedSel.value; if(playing) startPlay(); };
+
+showIconChk.onchange   =()=>{ stopInterp(); renderLayersInterpolated(interpT); };
+showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.trail=[]; stopInterp(); renderLayersInterpolated(interpT); };
+trailFramesSel.oninput =()=>{ renderLayersInterpolated(interpT); };
+iconSizeSel.oninput    =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
+pointSizeSel.oninput   =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
+showLinesChk.onchange  =()=>{ renderLayersInterpolated(interpT); };
+lineWidthSel.oninput   =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
+lineOpacitySel.oninput =()=>{ updateLabels(); renderLayersInterpolated(interpT); };
+
+btnAll.onclick=async()=>{
   setFilterMode("all");
-  await loadAndRender();
-});
+  const idx=await getRouteVarIndexForDay(daySel.value);
+  await renderRouteBlocks(idx);
+  renderLayersInterpolated(interpT);
+};
+btnNone.onclick=async()=>{
+  setFilterMode("none");
+  const idx=await getRouteVarIndexForDay(daySel.value);
+  await renderRouteBlocks(idx);
+  renderLayersInterpolated(interpT);
+};
+
+map.on("zoom",()=>{ renderLayersInterpolated(interpT); });
+map.on("load",async()=>{ setFilterMode("all"); await loadAndRender(); });
 </script>
 </body>
 </html>
