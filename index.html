@@ -530,6 +530,1067 @@ const overlay = new MapboxOverlay({layers: []});
 map.addControl(overlay);
 map.addControl(new maplibregl.NavigationControl(), "bottom-right");
 
+// ================================================================
+// CONFIG
+// ================================================================
+const DATA_BASE        = "https://pub-6fe252fa178448cfbd05092b11847534.r2.dev/vehicle_state_weekly";
+const LINE_GEOJSON_URL = "data/route_shape_lines.geojson";
+const ROUTE_META_URL   = "data/routes_meta.json";
+const BUS_ICON_URL     = "assets/bus.png";
+const ICON_MAPPING     = { bus:{x:0,y:0,width:64,height:64,anchorY:64} };
+
+// ================================================================
+// DATA LAYER
+// ================================================================
+let routeMeta  = null;
+let routeLines = null;
+const dayIndexCache = new Map();
+
+async function fetchJson(u){
+  const r = await fetch(u);
+  if(!r.ok) throw new Error(`Fetch failed: ${u} (${r.status})`);
+  return r.json();
+}
+
+async function getRouteMeta(){
+  if(routeMeta) return routeMeta;
+  routeMeta = await fetchJson(ROUTE_META_URL).catch(e=>{ console.warn(e); return {}; });
+  return routeMeta;
+}
+
+async function loadRouteLines(){
+  if(routeLines) return routeLines;
+  const gj = await fetchJson(LINE_GEOJSON_URL).catch(e=>{ console.warn(e); return {features:[]}; });
+  const out = [];
+  for(const f of (gj.features||[])){
+    const p = f.properties||{}, g = f.geometry||{};
+    const rid  = p.RouteId ?? p.routeid ?? p.route_id ?? p.ROUTEID;
+    const rvid = p.RouteVarId ?? p.routevarid ?? p.route_var_id ?? p.ROUTEVARID;
+    if(!rid) continue;
+    const RV = (rvid??'') !== '' ? String(rvid) : 'NA';
+    if(g.type==='LineString')
+      out.push({RouteId:String(rid), RouteVarId:RV, path:g.coordinates});
+    else if(g.type==='MultiLineString')
+      for(const c of g.coordinates)
+        out.push({RouteId:String(rid), RouteVarId:RV, path:c});
+  }
+  routeLines = out;
+  return routeLines;
+}
+
+// getDayIndex: parse CSV once, index by minute for O(1) per-frame lookup
+async function getDayIndex(day){
+  if(dayIndexCache.has(day)) return dayIndexCache.get(day);
+
+  statTime.textContent = 'Indexing…';
+
+  const u   = `${DATA_BASE}/${day}.csv`;
+  const r   = await fetch(u);
+  if(!r.ok) throw new Error(`Fetch failed: ${u}`);
+  const text = await r.text();
+  const lines = text.trim().split('\n');
+
+  if(lines.length <= 1){
+    const empty = {minuteMap:new Map(), byRouteId:new Map(), allKeys:new Set()};
+    dayIndexCache.set(day, empty);
+    return empty;
+  }
+
+  const hdr  = lines[0].split(',');
+  const iMin = hdr.findIndex(h=>h.trim().toLowerCase()==='minute');
+  const iLng = hdr.findIndex(h=>h.trim().toLowerCase()==='lng');
+  const iLat = hdr.findIndex(h=>h.trim().toLowerCase()==='lat');
+  const iR   = hdr.findIndex(h=>h.trim().toLowerCase()==='routeid');
+  const iV   = hdr.findIndex(h=>h.trim().toLowerCase()==='routevarid');
+  const iTT  = hdr.findIndex(h=>h.trim().toLowerCase()==='timetableid');
+  const iT   = hdr.findIndex(h=>h.trim().toLowerCase()==='tripid');
+  if(iMin<0||iLng<0||iLat<0||iR<0) throw new Error('CSV missing required columns');
+
+  const minuteMap = new Map();
+  const byRouteId = new Map();
+  const allKeys   = new Set();
+
+  for(let i=1; i<lines.length; i++){
+    const c   = lines[i].split(',');
+    const min = +c[iMin]; if(!Number.isFinite(min)) continue;
+    const rid = String(c[iR]??'').trim(); if(!rid) continue;
+    const rvid   = (iV >=0 && c[iV ]?.trim()) ? String(c[iV ].trim()) : 'NA';
+    const lng    = +c[iLng], lat = +c[iLat];
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    const ttid   = (iTT>=0 && c[iTT]?.trim()) ? String(c[iTT].trim()) : 'NA';
+    const tripId = (iT >=0 && c[iT ]?.trim()) ? String(c[iT ].trim()) : 'NA';
+    if(!minuteMap.has(min)) minuteMap.set(min, []);
+    minuteMap.get(min).push({lng, lat, routeId:rid, routeVarId:rvid, timeTableId:ttid, tripId});
+    if(!byRouteId.has(rid)) byRouteId.set(rid, new Set());
+    byRouteId.get(rid).add(rvid);
+    allKeys.add(rvKey(rid, rvid));
+  }
+
+  const idx = {minuteMap, byRouteId, allKeys};
+  dayIndexCache.set(day, idx);
+  return idx;
+}
+
+
+
+// ================================================================
+// GET MINUTE FRAME — O(1) lookup from pre-built index
+// Vehicle key = RouteId|RouteVarId|TimeTableId|TripId
+// ================================================================
+function getMinuteFrame(dayIndex, minute){
+  const rows = dayIndex.minuteMap.get(minute) ?? [];
+  const result = new Map();
+  for(const d of rows){
+    if(!keyAllowed(d.routeId, d.routeVarId)) continue;
+    const vehicleKey = `${d.routeId}|${d.routeVarId}|${d.timeTableId}|${d.tripId}`;
+    result.set(vehicleKey, d);
+  }
+  return result;
+}
+
+// ================================================================
+// VEHICLE STATE
+// Map<vehicleKey, {prevPos, currPos, heading, smoothTrail, routeId, routeVarId}>
+//
+// smoothTrail: dense array of [lng,lat] sampled every RAF tick during
+//              interpolation — gives a silky short tail with no jumps.
+// ================================================================
+const vehicleState = new Map();
+function clearVehicleState(){ vehicleState.clear(); }
+
+// ================================================================
+// PLAYBACK ENGINE
+//
+// Architecture: one continuous requestAnimationFrame loop.
+// setInterval is only used to fire "load next minute's data" at the
+// right wall-clock time. The RAF loop handles ALL rendering, which
+// means no jitter from timer drift and no frame drops between minutes.
+//
+//  globalT  : fractional minute within the current tick (0 → 1)
+//  minuteWall: performance.now() at the start of the current minute
+// ================================================================
+let rafId        = null;
+let playing      = false;
+let globalT      = 1;            // 1 = fully arrived at currPos
+let minuteWall   = 0;            // when the current minute tick started
+let tickDuration = 1000;         // ms per minute (= 1000 / speed)
+let loadTimer    = null;         // setInterval handle for data loading
+let cachedLines  = null;
+const interpBadge = document.getElementById("interpBadge");
+
+// Easing: ease-out cubic makes motion feel natural
+function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+// ================================================================
+// RAF LOOP — runs continuously while playing
+// ================================================================
+function rafLoop(now){
+  if(!playing){ rafId = null; return; }
+  rafId = requestAnimationFrame(rafLoop);
+
+  // Compute interpolation progress for this frame
+  const raw = Math.min((now - minuteWall) / tickDuration, 1);
+  globalT = easeOut(raw);
+
+  // Append current interpolated position to each vehicle's smooth trail
+  for(const vs of vehicleState.values()){
+    if(vs.trail.length === 0) continue;
+    const lng = lerp(vs.prevPos[0], vs.currPos[0], globalT);
+    const lat = lerp(vs.prevPos[1], vs.currPos[1], globalT);
+    // Only append if vehicle actually moved (avoids duplicate points for parked buses)
+    const last = vs.smoothTrail[vs.smoothTrail.length - 1];
+    if(!last || Math.abs(lng-last[0])>0.000005 || Math.abs(lat-last[1])>0.000005){
+      vs.smoothTrail.push([lng, lat]);
+    }
+    // Keep trail short: max 40 screen-sampled points (~0.7s at 60fps)
+    if(vs.smoothTrail.length > 40) vs.smoothTrail.shift();
+  }
+
+  renderFrame(globalT);
+}
+
+function startRafLoop(){
+  if(rafId) return; // already running
+  rafId = requestAnimationFrame(rafLoop);
+  interpBadge.classList.add("show");
+}
+function stopRafLoop(){
+  if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
+  interpBadge.classList.remove("show");
+  globalT = 1;
+}
+
+// ================================================================
+// VEHICLE STATE UPDATE  (called each minute tick)
+// ================================================================
+function updateVehicleState(newFrame){
+  const active = new Set(newFrame.keys());
+
+  for(const [vehicleKey, data] of newFrame){
+    if(vehicleState.has(vehicleKey)){
+      const vs   = vehicleState.get(vehicleKey);
+      const prev = vs.currPos;
+      const curr = [data.lng, data.lat];
+      const moved = Math.abs(curr[0]-prev[0]) > 0.000005 || Math.abs(curr[1]-prev[1]) > 0.000005;
+      vs.prevPos = prev;
+      vs.currPos = curr;
+      if(moved) vs.heading = bearing(prev, curr);
+      // Seed trail with last known position so it starts from where the bus was
+      if(vs.smoothTrail.length === 0) vs.smoothTrail.push([...prev]);
+      // Mark trail as needing continuation (reset growth from this new prev)
+    } else {
+      vehicleState.set(vehicleKey, {
+        prevPos:     [data.lng, data.lat],
+        currPos:     [data.lng, data.lat],
+        heading:     0,
+        smoothTrail: [],
+        routeId:     data.routeId,
+        routeVarId:  data.routeVarId,
+        trail:       [], // keep for compat, unused now
+      });
+    }
+  }
+
+  for(const key of vehicleState.keys()){
+    if(!active.has(key)) vehicleState.delete(key);
+  }
+}
+
+// ================================================================
+// RENDER FRAME
+// ================================================================
+function renderFrame(t){
+  const layers = [];
+  const baseAlpha = Math.round(255 * clamp(+lineOpacitySel.value,0,100)/100);
+  const lineAlpha = zoomLineAlpha(baseAlpha);
+  const iconPx    = zoomToIconSize(+iconSizeSel.value);
+
+  // 1. Route lines (light map: darker lines for contrast)
+  if(showLinesChk.checked && cachedLines && cachedLines.length){
+    const fl = cachedLines.filter(l => keyAllowed(l.RouteId, l.RouteVarId));
+    layers.push(new PathLayer({
+      id:"route-lines", data:fl,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPath:  d => d.path,
+      getWidth: zoomToLineWidth(+lineWidthSel.value),
+      widthUnits: "pixels",
+      getColor: d => {
+        const c = colorByRouteId(d.RouteId);
+        const alpha = (filterMode==="custom" && !selectedKeys.has(rvKey(d.RouteId,d.RouteVarId)))
+          ? Math.round(lineAlpha*0.25) : lineAlpha;
+        return [c[0], c[1], c[2], alpha];
+      },
+      jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
+    }));
+  }
+
+  // 2. Smooth comet tails (from RAF-sampled smoothTrail)
+  if(showTrailChk.checked){
+    const tailData = [];
+    for(const vs of vehicleState.values()){
+      if(vs.smoothTrail.length < 2) continue;
+      tailData.push({path: vs.smoothTrail, routeId: vs.routeId});
+    }
+    if(tailData.length){
+      const tw = Math.max(1.2, iconPx * 0.25);
+      // Outer glow
+      layers.push(new PathLayer({
+        id:"comet-tails", data:tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: tw, widthUnits:"pixels",
+        getColor: d => { const c=colorByRouteId(d.routeId); return[c[0],c[1],c[2],100]; },
+        jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
+      }));
+      // Bright core
+      layers.push(new PathLayer({
+        id:"comet-core", data:tailData,
+        coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+        getPath:  d => d.path,
+        getWidth: Math.max(0.8, tw*0.4), widthUnits:"pixels",
+        getColor: d => { const c=colorByRouteId(d.routeId); return[Math.min(255,c[0]+60),Math.min(255,c[1]+60),Math.min(255,c[2]+60),180]; },
+        jointRounded:true, capRounded:true, pickable:false, parameters:{depthTest:false}
+      }));
+    }
+  }
+
+  // 3. Vehicle icons / scatter
+  const pts = [];
+  for(const vs of vehicleState.values()){
+    pts.push({
+      lng:     lerp(vs.prevPos[0], vs.currPos[0], t),
+      lat:     lerp(vs.prevPos[1], vs.currPos[1], t),
+      heading: vs.heading,
+      routeId: vs.routeId,
+    });
+  }
+
+  if(showIconChk.checked){
+    layers.push(new IconLayer({
+      id:"bus-icons", data:pts,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition: d => [d.lng, d.lat],
+      iconAtlas:   BUS_ICON_URL,
+      iconMapping: ICON_MAPPING,
+      getIcon:     () => "bus",
+      sizeUnits:   "pixels",
+      getSize:     iconPx,
+      getColor:    d => colorByRouteId(d.routeId),
+      getAngle:    d => d.heading,
+      pickable:    false,
+      parameters:  {depthTest:false}
+    }));
+  } else {
+    layers.push(new ScatterplotLayer({
+      id:"bus-pts", data:pts,
+      coordinateSystem: deck.COORDINATE_SYSTEM.LNGLAT,
+      getPosition:  d => [d.lng, d.lat],
+      radiusUnits:  "meters",
+      getRadius:    zoomToPointR(+pointSizeSel.value*8),
+      getFillColor: d => colorByRouteId(d.routeId),
+      pickable:     false,
+      parameters:   {depthTest:false}
+    }));
+  }
+
+  overlay.setProps({layers});
+}
+
+// Alias for non-playing scrub use
+function renderLayersInterpolated(t){ renderFrame(t); }
+
+// ================================================================
+// PLAYBACK CONTROL
+// ================================================================
+function stopPlay(){
+  clearInterval(loadTimer); loadTimer = null;
+  stopRafLoop();
+  playing = false;
+  btnPlayToggle.innerHTML = "▶";
+  btnPlayToggle.classList.remove("playing");
+}
+
+async function startPlay(){
+  stopPlay();
+  playing = true;
+  btnPlayToggle.innerHTML = "⏸";
+  btnPlayToggle.classList.add("playing");
+  tickDuration = 1000 / +speedSel.value;
+
+  // Immediately load next minute's data, synced to wall clock
+  async function tick(){
+    minuteWall = performance.now();
+    minuteSlider.value = (+minuteSlider.value + 1) % 1440;
+    updateProgress();
+    try{
+      const dayIdx   = await getDayIndex(daySel.value);
+      const newFrame = getMinuteFrame(dayIdx, +minuteSlider.value);
+      updateVehicleState(newFrame);
+      statTime.textContent     = hhmm(+minuteSlider.value);
+      statVehicles.textContent = vehicleState.size;
+    } catch(e){ console.error(e); }
+  }
+
+  // Fire first tick immediately, then on interval
+  await tick();
+  startRafLoop();
+  loadTimer = setInterval(tick, tickDuration);
+}
+
+btnPlayToggle.addEventListener("click", ()=>{ if(playing) stopPlay(); else startPlay(); });
+
+// ================================================================
+// ADVANCE MINUTE (scrubbing — no RAF loop)
+// ================================================================
+async function advanceMinute(minute){
+  updateProgress(); updateLabels();
+  try{
+    const dayIdx   = await getDayIndex(daySel.value);
+    const newFrame = getMinuteFrame(dayIdx, minute);
+    // On scrub: jump directly, clear smooth trails to avoid stale paths
+    for(const vs of vehicleState.values()) vs.smoothTrail = [];
+    updateVehicleState(newFrame);
+    statTime.textContent     = hhmm(minute);
+    statVehicles.textContent = vehicleState.size;
+    globalT = 1;
+    renderFrame(1);
+  } catch(e){
+    console.error(e);
+    statTime.textContent="Error"; statVehicles.textContent=e.message;
+    overlay.setProps({layers:[]});
+  }
+}
+
+
+function updateLabels(){
+  iconSizeLabel.textContent    = iconSizeSel.value;
+  trailFramesLabel.textContent = trailFramesSel.value;
+  pointSizeLabel.textContent   = pointSizeSel.value;
+  lineWidthLabel.textContent   = lineWidthSel.value;
+  lineOpacityLabel.textContent = `${lineOpacitySel.value}%`;
+}
+
+// ================================================================
+// INITIAL LOAD
+// ================================================================
+async function loadAndRender(){
+  const day=daySel.value, minute=+minuteSlider.value;
+  updateProgress(); updateLabels();
+  try{
+    const[dayIdx,lines]=await Promise.all([getDayIndex(day),loadRouteLines()]);
+    cachedLines=lines;
+    if(routesBox.dataset.day!==day){ routesBox.dataset.day=day; await renderRouteBlocks(dayIdx); }
+    const newFrame=getMinuteFrame(dayIdx,minute);
+    clearVehicleState();
+
+    for(const [vehicleKey, data] of newFrame){
+      vehicleState.set(vehicleKey, {prevPos:[data.lng,data.lat],currPos:[data.lng,data.lat],heading:0,smoothTrail:[],trail:[],routeId:data.routeId,routeVarId:data.routeVarId});
+    }
+
+    statTime.textContent=hhmm(minute);
+    statVehicles.textContent=vehicleState.size;
+    updateFilterStatus();
+    renderFrame(1);
+  } catch(e){
+    console.error(e); statTime.textContent="Error"; statVehicles.textContent=e.message;
+    overlay.setProps({layers:[]});
+  }
+}
+
+// ================================================================
+// ROUTE LIST UI — full-width modal with var-chips
+// ================================================================
+let currentSearch="";
+let lastDayIndex=null;
+
+routeSearch.addEventListener("input",()=>{ currentSearch=routeSearch.value.trim().toLowerCase(); rebuildRouteList(); });
+
+async function renderRouteBlocks(dayIndex){
+  lastDayIndex=dayIndex;
+  await getRouteMeta();
+  // Compute total var count for selection display
+  totalRouteVarCount=0;
+  for(const vars of dayIndex.byRouteId.values()) totalRouteVarCount+=vars.size;
+  rebuildRouteList();
+}
+
+function rebuildRouteList(){
+  const dayIndex=lastDayIndex; if(!dayIndex) return;
+  const meta=routeMeta||{};
+  routesBox.innerHTML="";
+  let routeIds=Array.from(dayIndex.byRouteId.keys()).sort((a,b)=>(+a)-(+b));
+  if(currentSearch) routeIds=routeIds.filter(rid=>{
+    const m=meta[rid]||{};
+    return String(m.RouteNo||rid).toLowerCase().includes(currentSearch)||
+           String(m.RouteName||"").toLowerCase().includes(currentSearch);
+  });
+
+  for(const rid of routeIds){
+    const m=meta[rid]||{};
+    const routeNo=m.RouteNo||rid, routeName=m.RouteName||"";
+    const vars=Array.from(dayIndex.byRouteId.get(rid)||new Set(["NA"]))
+      .sort((a,b)=>String(a).localeCompare(String(b),"en",{numeric:true}));
+    const allVarKeys=vars.map(v=>rvKey(rid,v));
+    const col=colorByRouteId(rid);
+    const colorStr=`rgba(${col[0]},${col[1]},${col[2]},0.85)`;
+
+    const block=document.createElement("div"); block.className="routeBlock";
+
+    // Top row: chip + name + toggle btn
+    const topRow=document.createElement("div"); topRow.className="route-row-top";
+
+    const chip=document.createElement("span"); chip.className="chip";
+    chip.style.borderLeft=`4px solid ${colorStr}`;
+    chip.textContent=`Route ${routeNo}`;
+
+    const name=document.createElement("span"); name.className="route-name";
+    name.textContent=routeName;
+
+    const allSel=allVarKeys.every(k=>selectedKeys.has(k)||(filterMode==="all"));
+    const toggleBtn=document.createElement("button");
+    toggleBtn.className="route-toggle-btn"+(allSel?" selected":"");
+    toggleBtn.textContent=allSel?"✓ Selected":"Select all";
+    toggleBtn.onclick=()=>{
+      if(filterMode!=="custom"){
+        setFilterMode("custom");
+        selectedKeys=new Set(dayIndex.allKeys); // start fully selected, then deselect this route
+      }
+      const nowSel=allVarKeys.every(k=>selectedKeys.has(k));
+      if(nowSel) allVarKeys.forEach(k=>selectedKeys.delete(k));
+      else allVarKeys.forEach(k=>selectedKeys.add(k));
+      if(selectedKeys.size===0) setFilterMode("none");
+      else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+      updateFilterStatus();
+      rebuildRouteList();
+      renderFrame(globalT);
+    };
+
+    topRow.appendChild(chip);
+    topRow.appendChild(name);
+    topRow.appendChild(toggleBtn);
+    block.appendChild(topRow);
+
+    // Variant chips
+    const varsRow=document.createElement("div"); varsRow.className="route-vars";
+    for(const v of vars){
+      const k=rvKey(rid,v);
+      const allowed=keyAllowed(rid,v);
+      const vc=document.createElement("div");
+      vc.className="var-chip"+(allowed?" selected":"");
+      const dot=document.createElement("span"); dot.className="var-chip-dot";
+      dot.style.background=colorStr;
+      vc.appendChild(dot);
+      vc.appendChild(document.createTextNode(`Var ${v}`));
+      vc.onclick=()=>{
+        // First click from "all" mode: keep everything selected, then toggle this key
+        if(filterMode!=="custom"){
+          setFilterMode("custom");
+          selectedKeys=new Set(dayIndex.allKeys); // start from all-selected, then toggle
+        }
+        if(selectedKeys.has(k)) selectedKeys.delete(k); else selectedKeys.add(k);
+        if(selectedKeys.size===0) setFilterMode("none");
+        else if(selectedKeys.size===dayIndex.allKeys.size) setFilterMode("all");
+        updateFilterStatus();
+        rebuildRouteList();
+        renderFrame(globalT);
+      };
+      varsRow.appendChild(vc);
+    }
+    block.appendChild(varsRow);
+    routesBox.appendChild(block);
+  }
+  updateFilterStatus();
+}
+
+// ================================================================
+// EVENTS
+// ================================================================
+daySel.onchange=async()=>{ stopPlay(); clearVehicleState(); cachedLines=null; await loadAndRender(); };
+
+minuteSlider.oninput=async()=>{ stopPlay(); updateProgress(); await advanceMinute(+minuteSlider.value); };
+
+speedSel.onchange=()=>{ interpDuration=1000/+speedSel.value; if(playing) startPlay(); };
+
+showIconChk.onchange   =()=>{ stopRafLoop(); renderFrame(globalT); };
+showTrailChk.onchange  =()=>{ if(!showTrailChk.checked) for(const vs of vehicleState.values()) vs.smoothTrail=[]; stopRafLoop(); renderFrame(globalT); };
+trailFramesSel.oninput =()=>{ renderFrame(globalT); };
+iconSizeSel.oninput    =()=>{ updateLabels(); renderFrame(globalT); };
+pointSizeSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
+showLinesChk.onchange  =()=>{ renderFrame(globalT); };
+lineWidthSel.oninput   =()=>{ updateLabels(); renderFrame(globalT); };
+lineOpacitySel.oninput =()=>{ updateLabels(); renderFrame(globalT); };
+
+btnAll.onclick=async()=>{
+  setFilterMode("all");
+  rebuildRouteList();
+  renderFrame(globalT);
+};
+btnNone.onclick=async()=>{
+  setFilterMode("none");
+  rebuildRouteList();
+  renderFrame(globalT);
+};
+
+map.on("zoom",()=>{ renderFrame(globalT); });
+map.on("load",async()=>{ setFilterMode("all"); await loadAndRender(); });
+</script>
+</body>
+</html>    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden;
+      font-family: "DM Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background: var(--bg); color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* =============================================
+       MAP (full-screen minus playbar)
+    ============================================= */
+    #map {
+      position: absolute;
+      inset: 0 0 var(--playbar-h) 0;
+    }
+
+    /* =============================================
+       SETTINGS PANEL (top-left float)
+    ============================================= */
+    #settingsPanel {
+      position: absolute;
+      top: 14px; left: 14px;
+      z-index: 20;
+      width: var(--sidebar-w);
+      backdrop-filter: blur(18px);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+      font-size: 13px;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* Panel header */
+    .sp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15,17,21,0.6);
+    }
+    .sp-brand { display: flex; flex-direction: column; gap: 2px; }
+    .sp-title { font-size: 0.86rem; font-weight: 700; letter-spacing: -0.01em; }
+    .sp-sub   { font-size: 0.65rem; color: var(--muted); }
+    .hero-tag {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: var(--accent-bg); border: 1px solid var(--accent-border);
+      color: var(--accent-2); font-size: 0.58rem; font-weight: 800;
+      letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .sp-actions { display: flex; gap: 6px; align-items: center; }
+
+    /* Icon button */
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--glass-light);
+      color: var(--muted); cursor: pointer; font-size: 14px;
+      transition: background 0.13s, color 0.13s;
+      flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+    .icon-btn.active { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+
+    /* Collapsible display drawer */
+    .sp-drawer {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    .sp-drawer.open { max-height: 600px; }
+    .sp-drawer-inner { padding: 12px 16px 14px; border-top: 1px solid var(--border); }
+
+    /* Status bar */
+    .sp-stat {
+      display: flex; gap: 12px; padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .stat-item { display: flex; gap: 4px; align-items: baseline; font-size: 0.67rem; color: var(--muted); }
+    .stat-val  { font-weight: 700; color: var(--accent-2); }
+
+    /* Interp badge */
+    .interp-badge {
+      display: none; align-items: center; gap: 5px; padding: 3px 9px;
+      border-radius: 999px; background: var(--green-bg); border: 1px solid var(--green-border);
+      color: var(--green); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .interp-badge.show { display: inline-flex; }
+    .interp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+    /* =============================================
+       FORM ELEMENTS
+    ============================================= */
+    .kicker {
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--accent-2); margin-bottom: 9px;
+    }
+    .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .form-row:last-child { margin-bottom: 0; }
+    .lbl { font-size: 0.72rem; color: var(--muted); min-width: 80px; }
+    .val { font-size: 0.72rem; font-weight: 600; min-width: 26px; text-align: right; color: var(--text); }
+    .hint { font-size: 0.65rem; color: var(--muted); }
+
+    input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); cursor: pointer; height: 3px; }
+
+    select {
+      background: var(--glass-light); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.73rem;
+      padding: 4px 8px; cursor: pointer; font-family: inherit;
+    }
+    select:focus { outline: none; border-color: var(--accent-border); }
+    select option { background: #1a1f2e; }
+
+    .check-row {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+      font-size: 0.75rem; color: var(--muted); cursor: pointer;
+    }
+    .check-row:last-child { margin-bottom: 0; }
+    .check-row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+
+    .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+    /* =============================================
+       FIXED BOTTOM PLAYBAR
+    ============================================= */
+    #playbar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: var(--playbar-h);
+      z-index: 30;
+      backdrop-filter: blur(20px);
+      background: rgba(10,12,17,0.92);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    /* Play/pause button */
+    #playToggle {
+      display: flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid var(--accent-border);
+      background: var(--accent-bg); color: var(--accent-2);
+      font-size: 16px; cursor: pointer; flex-shrink: 0;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #playToggle:hover { background: rgba(141,183,255,0.18); transform: scale(1.06); }
+    #playToggle.playing { background: rgba(141,183,255,0.16); border-color: var(--accent); }
+
+    /* Day + speed selectors */
+    .pb-select-group { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .pb-select-group select { font-size: 0.72rem; padding: 4px 7px; }
+
+    /* Time display — click to edit */
+    .pb-time-block { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; cursor: pointer; }
+    #timeDisplay {
+      font-size: 1.55rem; font-weight: 800; font-variant-numeric: tabular-nums;
+      color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
+      border: none; background: transparent; text-align: center;
+      width: 92px; cursor: pointer; caret-color: var(--accent-2);
+      font-family: inherit;
+    }
+    #timeDisplay:focus { outline: 2px solid var(--accent-border); border-radius: 6px; }
+    #timeDisplay.error { color: var(--danger); }
+    .pb-time-hint { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    /* Scrubber column (takes remaining space) */
+    .pb-scrubber { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+    /* Timeline gradient track */
+    .pb-track-wrap { position: relative; height: 28px; display: flex; align-items: center; }
+    .pb-gradient-track {
+      position: absolute; left: 0; right: 0; height: 6px; border-radius: 3px;
+      background: linear-gradient(to right,
+        #1a2a4a 0%,       /* 00:00 midnight */
+        #1e3a6e 15%,      /* 04:00 pre-dawn */
+        #f59e0b 25%,      /* 06:00 sunrise */
+        #fde68a 35%,      /* 08:00 morning */
+        #e0f2fe 50%,      /* 12:00 noon */
+        #fde68a 65%,      /* 16:00 afternoon */
+        #f97316 75%,      /* 18:00 sunset */
+        #312e81 87%,      /* 21:00 dusk */
+        #1a2a4a 100%      /* 24:00 midnight */
+      );
+      pointer-events: none;
+    }
+    .pb-progress-line {
+      position: absolute; top: 0; left: 0; height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.35); pointer-events: none;
+      transition: width 0.05s linear;
+    }
+    #minuteSlider {
+      position: relative; z-index: 1; width: 100%;
+      appearance: none; -webkit-appearance: none;
+      background: transparent; cursor: pointer; height: 28px;
+    }
+    #minuteSlider::-webkit-slider-thumb {
+      appearance: none; -webkit-appearance: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    #minuteSlider::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;
+    }
+
+    /* Tick labels */
+    .pb-ticks { display: flex; justify-content: space-between; padding: 0 2px; }
+    .pb-ticks span { font-size: 0.58rem; color: var(--muted); }
+
+    /* =============================================
+       ROUTE FILTER MODAL
+    ============================================= */
+    #filterModal {
+      position: absolute;
+      inset: 0 0 var(--playbar-h) 0;
+      z-index: 40;
+      display: none;
+      align-items: stretch;
+      justify-content: flex-end;
+    }
+    #filterModal.open { display: flex; }
+
+    .modal-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(3px);
+      cursor: pointer;
+    }
+    .modal-drawer {
+      position: relative; z-index: 1;
+      width: 400px; max-width: 92vw;
+      display: flex; flex-direction: column;
+      background: rgba(14,16,22,0.97);
+      border-left: 1px solid var(--border);
+      box-shadow: -20px 0 60px rgba(0,0,0,0.5);
+      animation: slideIn 0.22s cubic-bezier(0.4,0,0.2,1);
+    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 14px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 0.9rem; font-weight: 700; }
+    .modal-sub   { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+    .modal-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .modal-toolbar input[type=search] {
+      flex: 1; min-width: 120px; padding: 7px 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--glass-light); color: var(--text);
+      font-size: 0.78rem; font-family: inherit;
+    }
+    .modal-toolbar input[type=search]:focus { outline: none; border-color: var(--accent-border); }
+    .modal-toolbar input[type=search]::placeholder { color: var(--muted); }
+
+    .sel-count {
+      font-size: 0.7rem; color: var(--muted); white-space: nowrap;
+    }
+    .sel-count b { color: var(--accent-2); }
+
+    .sm-btn {
+      padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--glass-light); color: var(--muted); font-size: 0.72rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: background 0.12s, color 0.12s;
+    }
+    .sm-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+
+    .modal-body {
+      flex: 1; overflow-y: auto; scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
+    }
+    .modal-body::-webkit-scrollbar { width: 4px; }
+    .modal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+    .routeBlock {
+      padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.12s;
+    }
+    .routeBlock:hover { background: rgba(255,255,255,0.03); }
+    .routeBlock:last-child { border-bottom: none; }
+
+    .route-row-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .chip {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+      background: rgba(255,255,255,0.07); border: 1px solid var(--border);
+      font-size: 0.7rem; font-weight: 700; white-space: nowrap; color: var(--text);
+    }
+    .route-name { font-size: 0.75rem; color: var(--muted); flex: 1; }
+    .route-toggle-btn {
+      padding: 4px 12px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--glass-light); color: var(--muted);
+      font-size: 0.68rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      transition: background 0.12s, color 0.12s;
+      flex-shrink: 0;
+    }
+    .route-toggle-btn:hover { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+    .route-toggle-btn.selected { background: var(--accent-bg); color: var(--accent-2); border-color: var(--accent-border); }
+
+    .route-vars { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .var-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 7px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      font-size: 0.65rem; color: var(--muted); cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .var-chip.selected { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent-2); }
+    .var-chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    @media (max-width: 600px) {
+      #playbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px; }
+      :root { --playbar-h: 130px; }
+      .modal-drawer { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+      #filterModal { justify-content: flex-start; align-items: flex-end; }
+      @keyframes slideIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    }
+  </style>
+</head>
+<body>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- =============================================
+     SETTINGS PANEL (top-left)
+============================================= -->
+<div id="settingsPanel">
+  <div class="sp-header">
+    <div class="sp-brand">
+      <div class="hero-tag">Live Simulation</div>
+      <div class="sp-title">Bus Weekly Playback</div>
+      <div class="sp-sub">Ho Chi Minh City · GTFS · TripId tracking</div>
+    </div>
+    <div class="sp-actions">
+      <div class="interp-badge" id="interpBadge"><span class="interp-dot"></span>Live</div>
+      <!-- Filter routes button -->
+      <button class="icon-btn" id="filterBtn" title="Filter routes">⊞</button>
+      <!-- Display settings toggle -->
+      <button class="icon-btn" id="displayToggle" title="Display settings">⚙</button>
+    </div>
+  </div>
+
+  <!-- Collapsible display drawer -->
+  <div class="sp-drawer" id="displayDrawer">
+    <div class="sp-drawer-inner">
+      <div class="kicker">Display Settings</div>
+
+      <div class="check-row">
+        <input type="checkbox" id="showIcon" checked />
+        <label for="showIcon">Bus icons</label>
+      </div>
+      <div class="form-row">
+        <span class="lbl" style="padding-left:18px">Icon size</span>
+        <input id="iconSize" type="range" min="4" max="48" value="8"/>
+        <span class="val" id="iconSizeLabel">8</span><span class="hint">pt</span>
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="showTrail" checked />
+        <label for="showTrail">Comet tail</label>
+      </div>
+      <div class="form-row">
+        <span class="lbl" style="padding-left:18px">Tail length</span>
+        <input id="trailFrames" type="range" min="2" max="12" value="5"/>
+        <span class="val" id="trailFramesLabel">5</span><span class="hint">frames</span>
+      </div>
+
+      <div class="form-row">
+        <span class="lbl" style="padding-left:18px">Point size</span>
+        <input id="pointSize" type="range" min="2" max="20" value="6"/>
+        <span class="val" id="pointSizeLabel">6</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="check-row">
+        <input type="checkbox" id="showLines" checked />
+        <label for="showLines">Route lines</label>
+      </div>
+      <div class="form-row">
+        <span class="lbl" style="padding-left:18px">Width</span>
+        <input id="lineWidth" type="range" min="1" max="14" value="2"/>
+        <span class="val" id="lineWidthLabel">2</span><span class="hint">pt</span>
+      </div>
+      <div class="form-row">
+        <span class="lbl" style="padding-left:18px">Opacity</span>
+        <input id="lineOpacity" type="range" min="0" max="100" value="55"/>
+        <span class="val" id="lineOpacityLabel">55%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="sp-stat">
+    <span class="stat-item">Time <span class="stat-val" id="statTime">—</span></span>
+    <span class="stat-item">Vehicles <span class="stat-val" id="statVehicles">—</span></span>
+    <span class="stat-item">Filter <span class="stat-val" id="statFilter">all</span></span>
+  </div>
+</div>
+
+<!-- =============================================
+     FIXED BOTTOM PLAYBAR
+============================================= -->
+<div id="playbar">
+  <!-- Play/pause -->
+  <button id="playToggle" title="Play / Pause">▶</button>
+
+  <!-- Day + Speed -->
+  <div class="pb-select-group">
+    <select id="day" title="Day of week">
+      <option>Mon</option><option>Tue</option><option>Wed</option>
+      <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
+    </select>
+    <select id="speed" title="Playback speed">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+
+  <!-- Inline time editor -->
+  <div class="pb-time-block" title="Click to edit time">
+    <input id="timeDisplay" type="text" value="06:00" maxlength="5" spellcheck="false"/>
+    <div class="pb-time-hint">tap to jump</div>
+  </div>
+
+  <!-- Timeline scrubber -->
+  <div class="pb-scrubber">
+    <div class="pb-track-wrap">
+      <div class="pb-gradient-track"></div>
+      <div class="pb-progress-line" id="progressLine"></div>
+      <input id="minuteSlider" type="range" min="0" max="1439" value="360"/>
+    </div>
+    <div class="pb-ticks">
+      <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+    </div>
+  </div>
+</div>
+
+<!-- =============================================
+     ROUTE FILTER MODAL (right drawer)
+============================================= -->
+<div id="filterModal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-drawer">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Route Filter</div>
+        <div class="modal-sub">Select routes and variants to display on the map</div>
+      </div>
+      <button class="icon-btn" id="modalClose" title="Close">✕</button>
+    </div>
+    <div class="modal-toolbar">
+      <input type="search" id="routeSearch" placeholder="Search route name or number…" autocomplete="off"/>
+      <div class="sel-count" id="selCount"><b>—</b> / — selected</div>
+      <button class="sm-btn" id="selectAll">All</button>
+      <button class="sm-btn" id="selectNone">Clear</button>
+    </div>
+    <div class="modal-body" id="routesBox">
+      <div style="padding:16px 20px;color:var(--muted);font-size:0.78rem">Loading routes…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const {IconLayer, ScatterplotLayer, PathLayer} = deck;
+const {MapboxOverlay} = deck;
+
+// ================================================================
+// MAP
+// ================================================================
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  center: [106.7, 10.77],
+  zoom: 11
+});
+const overlay = new MapboxOverlay({layers: []});
+map.addControl(overlay);
+map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+
 
 // ================================================================
 // VEHICLE STATE
