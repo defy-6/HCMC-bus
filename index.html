@@ -942,6 +942,24 @@ function getMinuteFrame(dayIndex,minute){
 const vehicleState=new Map();
 function clearVehicleState(){ vehicleState.clear(); }
 
+function isRouteReset(prevDist,currDist,geom){
+  if(!geom||prevDist==null||currDist==null||!Number.isFinite(geom.total)||geom.total<=0) return false;
+  const total=geom.total;
+  const prevRatio=prevDist/total;
+  const currRatio=currDist/total;
+
+  // Case 1: normal route direction. Vehicle reaches the end, then starts again near the origin.
+  const forwardTerminalReset = prevRatio>0.85 && currRatio<0.15;
+
+  // Case 2: route shape direction is reversed. Vehicle reaches the origin-end, then starts again near the other end.
+  const reverseTerminalReset = prevRatio<0.15 && currRatio>0.85;
+
+  // Extra protection: any jump covering more than half of the route is unlikely to be a real 1-minute movement.
+  const largeRouteJump = Math.abs(currDist-prevDist)>total*0.50;
+
+  return (forwardTerminalReset||reverseTerminalReset)&&largeRouteJump;
+}
+
 function updateVehicleState(newFrame){
   const active=new Set(newFrame.keys());
   for(const[key,data] of newFrame){
@@ -951,21 +969,39 @@ function updateVehicleState(newFrame){
 
     if(vehicleState.has(key)){
       const vs=vehicleState.get(key);
-      vs.prevPos=vs.currPos;
+
+      const oldPos=vs.currPos;
+      const oldDist=vs.currRouteDist;
+      const newDist=projCurr?projCurr.routeDist:null;
+      const newGeom=projCurr?projCurr.geom:null;
+
+      vs.prevPos=oldPos;
       vs.currPos=snappedCurr;
-      vs.prevRouteDist=vs.currRouteDist;
-      vs.currRouteDist=projCurr?projCurr.routeDist:null;
-      vs.routeGeom=projCurr?projCurr.geom:null;
+      vs.prevRouteDist=oldDist;
+      vs.currRouteDist=newDist;
+      vs.routeGeom=newGeom;
       vs.routeId=data.routeId;
       vs.routeVarId=data.routeVarId;
       vs.timeTableId=data.timeTableId;
       vs.tripId=data.tripId;
       vs.vehicleKey=key;
 
-      if(vs.routeGeom&&vs.prevRouteDist!=null&&vs.currRouteDist!=null){
+      // Prevent terminal-to-origin or origin-to-terminal reset from being animated as a very fast trip.
+      // If detected, treat the current observation as a new trip start: jump to the new point and clear the tail.
+      if(isRouteReset(vs.prevRouteDist,vs.currRouteDist,vs.routeGeom)){
+        vs.prevPos=vs.currPos;
+        vs.prevRouteDist=vs.currRouteDist;
+        vs.smoothTrail=[];
+        vs.heading=0;
+        vs.justReset=true;
+      }else{
+        vs.justReset=false;
+      }
+
+      if(vs.routeGeom&&vs.prevRouteDist!=null&&vs.currRouteDist!=null&&!vs.justReset){
         const midDist=lerp(vs.prevRouteDist,vs.currRouteDist,0.5);
         vs.heading=bearingAtRouteDistance(vs.routeGeom,midDist);
-      }else{
+      }else if(!vs.justReset){
         const moved=Math.abs(vs.currPos[0]-vs.prevPos[0])>0.000005||Math.abs(vs.currPos[1]-vs.prevPos[1])>0.000005;
         if(moved) vs.heading=bearing(vs.prevPos,vs.currPos);
       }
@@ -982,7 +1018,8 @@ function updateVehicleState(newFrame){
         routeVarId:data.routeVarId,
         timeTableId:data.timeTableId,
         tripId:data.tripId,
-        vehicleKey:key
+        vehicleKey:key,
+        justReset:false
       });
     }
   }
